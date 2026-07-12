@@ -35,19 +35,79 @@ class GraphState(TypedDict):
 memory=MemorySaver()
 
 calendar = {
-    "2026-07-10": "available",
-    "2026-07-12": "available",
-    "2026-07-14": "booked",
-    "2026-07-16": "booked",
-    "2026-07-18": "available",
-    "2026-07-20": "available",
-    "2026-07-22": "available",
-    "2026-07-24": "booked",
-    "2026-07-26": "booked",
-    "2026-07-30": "booked",
+    "2026-07-10": 
+    {
+    "status": "available",
+    "customer_name": None,
+    "phone_number": None,
+    "time": None,
+},
+    "2026-07-12": 
+    {
+    "status": "available",
+    "customer_name": None,
+    "phone_number": None,
+    "time": None,
+},
+    "2026-07-14": 
+    {
+    "status": "available",
+    "customer_name": None,
+    "phone_number": None,
+    "time": None,
+},
+    "2026-07-16": 
+    {
+    "status": "booked",
+    "customer_name": 'khadijah',
+    "phone_number": '09163456069',
+    "time": "10:30 AM",
+},
+    "2026-07-18": 
+    {
+    "status": "available",
+    "customer_name": None,
+    "phone_number": None,
+    "time": None,
+},
+    "2026-07-20": 
+    {
+    "status": "available",
+    "customer_name": None,
+    "phone_number": None,
+    "time": None,
+},
+    "2026-07-22": 
+    {
+    "status": "available",
+    "customer_name": None,
+    "phone_number": None,
+    "time": None,
+},
+    "2026-07-24": 
+    {
+    "status": "booked",
+    "customer_name": 'mary',
+    "phone_number": '08023882233',
+    "time": "11:20 AM",
+},
+    "2026-07-26": 
+    {
+    "status": "available",
+    "customer_name": None,
+    "phone_number": None,
+    "time": None,
+},
+    "2026-07-30": {
+    "status": "available",
+    "customer_name": None,
+    "phone_number": None,
+    "time": None,
+},
 }
 
 def collect_customer_message(state):
+  print(">>> collect_customer_message")
   user_inquiry =  input('enter you inquiry :')
   return {
       "human_message": user_inquiry,
@@ -62,17 +122,48 @@ from langchain_core.tools import tool
 
 @tool
 def check_calendar(date : str):
-  """Checks the availability status for a given date in the calendar."""
-  print(f"Tool called with: {date}")  
+  """
+  Use this tool ONLY when the customer wants to know whether a date is available.
+  Do NOT use this tool to make a booking.
+  """ 
   if date in calendar:
     return { 'status' : calendar[date]}
   else:
     return{'status' : 'not available'}
 
-model_with_tools = model.bind_tools([check_calendar])
-tool_node=ToolNode([check_calendar])
+
+@tool
+def book_appointment(date : str,time : str,customer_name : str ,phone_number : str):
+  """
+  Use this tool ONLY when the customer wants to book an appointment.
+  This tool reserves the date and stores the customer's name, phone number, and preferred time.
+  """
+  if date in calendar:
+    if calendar[date]['status'] == 'available':
+      calendar[date]['status'] = "booked"
+      calendar[date]['customer_name'] = customer_name
+      calendar[date]['phone_number'] = phone_number
+      calendar[date]['time'] = time
+
+      return{'status' : 'success',
+             'customer_name': customer_name,
+             'time': time,
+             'message' : f"Your appointment has been booked successfully for {date}."}
+
+    else:
+      return {'status' : 'error',
+              'message' : 'please pick another date,the date you picked is not available'}
+
+  return{'status': 'error',
+       'message' : 'date not found'}
+
+model_with_tools = model.bind_tools([check_calendar,book_appointment])
+tool_node=ToolNode([check_calendar,book_appointment])
+
+
 
 def khay_assistant(state):
+  print(">>> khay_assistant")
 
   prompt = ChatPromptTemplate.from_messages([
       ('system' , '''you are a fashion designers assistant,her name is tailor khay,you will respond
@@ -107,23 +198,14 @@ def intent_router(state):
           'intent': 'pricing'
     }
 
-      elif i in ['book','appointment']:
-        return {
-          'intent': 'appointment'
-      }
+    
 
 
     else:
       return {
           'intent' : 'general'
       }
-def book_appointment(state):
-  message='the only date available for the date of july is 24 and 27'
-  print(message)
-  return{
-      'ai_message' : message,
-      'messages': [AIMessage (content= message)]
-  }
+
 
 def pricing (state):
   message='we will handover to tailor_khay to come give you the price'
@@ -151,7 +233,7 @@ def should_continue(state):
 graph=StateGraph(GraphState)
 graph.add_node('khay_assistant', khay_assistant)
 graph.add_node('collect_customer_message', collect_customer_message)
-graph.add_node('book_appointment',book_appointment)
+
 graph.add_node('pricing',pricing)
 graph.add_node('intent_router',intent_router)
 graph.add_node('continue_router', should_continue)
@@ -161,7 +243,7 @@ graph.add_edge('collect_customer_message' , 'intent_router')
 graph.add_conditional_edges ('intent_router',
                 lambda state : state['intent'],
                 {'pricing' : 'pricing',
-                'appointment': 'book_appointment',
+
                 'general' : 'khay_assistant'
                  })
 graph.add_conditional_edges( 'khay_assistant', tools_condition)
@@ -174,7 +256,7 @@ graph.add_conditional_edges('continue_router',
                             )
 
 
-graph.add_edge('book_appointment', 'continue_router')
+
 graph.add_edge('pricing', 'continue_router')
 
 app=graph.compile(checkpointer=memory)
