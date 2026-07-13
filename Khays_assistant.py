@@ -157,18 +157,74 @@ def book_appointment(date : str,time : str,customer_name : str ,phone_number : s
   return{'status': 'error',
        'message' : 'date not found'}
 
-model_with_tools = model.bind_tools([check_calendar,book_appointment])
-tool_node=ToolNode([check_calendar,book_appointment])
 
+
+@tool
+def cancel_appointment(customer_name: str,date: str):
+  """cancel an appointment booked by the customer and make the date available for booking"""
+
+  print("cancel_appointment tool called")
+  
+
+  if date in calendar:
+    if calendar[date]['customer_name'].lower() == customer_name.lower() and calendar[date]['status']=='booked':
+      calendar[date]['status'] = "available"
+      calendar[date]['customer_name'] = None
+      calendar[date]['phone_number'] = None
+      calendar[date]['time'] = None
+
+      return{
+          'status' : 'cancelled',
+          'message' : f'The booking for {date} has been sucessfully cancelled'
+      }
+
+    else:
+      return{'status' : 'error',
+             'message' : 'You do not have a booking '}
+  else:
+    return{
+      'status': 'error',
+      'message' : 'invalid date,please put in correct date'
+    }
+
+model_with_tools = model.bind_tools([check_calendar,book_appointment,cancel_appointment])
+tool_node=ToolNode([check_calendar,book_appointment,cancel_appointment])
 
 
 def khay_assistant(state):
   print(">>> khay_assistant")
 
   prompt = ChatPromptTemplate.from_messages([
-      ('system' , '''you are a fashion designers assistant,her name is tailor khay,you will respond
-                to messages asked by her customer,if its about things you dont know,say you dont know
-              make sure you are nice and very polite
+      ('system' , '''You are Tailor Khay's AI assistant.
+
+You represent Tailor Khay and speak on her behalf. Customers should feel like they are talking directly to Tailor Khay's business.
+
+Your responsibilities include:
+Greeting customers warmly and professionally.
+Answering questions about appointments and Tailor Khay's services.
+Checking appointment availability.
+Booking appointments.
+Cancelling appointments.
+Collecting any information needed to complete a booking.
+Handling the entire conversation whenever possible.
+
+Guidelines:
+Be friendly, professional, and polite.
+Never make up information. If you do not know something, say so.
+Never reveal another customer's personal information, including their name, phone number, appointment time, or booking details.
+If information is missing, politely ask only for the missing information.
+Do not guess dates, names, phone numbers, or appointment times.
+Use the available tools whenever they are needed.
+After a tool completes successfully, explain the result naturally to the customer.
+If a tool returns an error, politely explain the problem and guide the customer on what to do next.
+
+Pricing:
+Do not calculate or estimate prices.
+If the customer asks for a price, a quotation, or the cost of a dress or tailoring service, explain that Tailor Khay will personally review the request and provide the final price.
+Collect any necessary details about the customer's request before handing the conversation over.
+Once all necessary details have been collected, inform the customer that their request has been forwarded to Tailor Khay for pricing.
+
+Your goal is to complete as much of the conversation as possible before involving Tailor Khay.
       '''),
 
      MessagesPlaceholder('messages')
@@ -178,9 +234,6 @@ def khay_assistant(state):
   message=prompt.invoke(
      {'messages' : state['messages']}
      )
-
-
-
 
   response =model_with_tools.invoke(message)
   print(response.content)
@@ -197,9 +250,6 @@ def intent_router(state):
         return {
           'intent': 'pricing'
     }
-
-    
-
 
     else:
       return {
