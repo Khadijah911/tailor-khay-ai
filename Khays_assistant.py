@@ -1,3 +1,4 @@
+from inspect import EndOfBlock
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -16,6 +17,7 @@ from langchain_openai import ChatOpenAI
 from langchain_openai import ChatOpenAI
 from langgraph.prebuilt import ToolNode,tools_condition
 import os
+import json
 
 api_key = os.getenv("OPENAI_API_KEY")
 model = ChatOpenAI(
@@ -34,77 +36,20 @@ class GraphState(TypedDict):
 
 memory=MemorySaver()
 
-calendar = {
-    "2026-07-10": 
-    {
-    "status": "available",
-    "customer_name": None,
-    "phone_number": None,
-    "time": None,
-},
-    "2026-07-12": 
-    {
-    "status": "available",
-    "customer_name": None,
-    "phone_number": None,
-    "time": None,
-},
-    "2026-07-14": 
-    {
-    "status": "available",
-    "customer_name": None,
-    "phone_number": None,
-    "time": None,
-},
-    "2026-07-16": 
-    {
-    "status": "booked",
-    "customer_name": 'khadijah',
-    "phone_number": '09163456069',
-    "time": "10:30 AM",
-},
-    "2026-07-18": 
-    {
-    "status": "available",
-    "customer_name": None,
-    "phone_number": None,
-    "time": None,
-},
-    "2026-07-20": 
-    {
-    "status": "available",
-    "customer_name": None,
-    "phone_number": None,
-    "time": None,
-},
-    "2026-07-22": 
-    {
-    "status": "available",
-    "customer_name": None,
-    "phone_number": None,
-    "time": None,
-},
-    "2026-07-24": 
-    {
-    "status": "booked",
-    "customer_name": 'mary',
-    "phone_number": '08023882233',
-    "time": "11:20 AM",
-},
-    "2026-07-26": 
-    {
-    "status": "available",
-    "customer_name": None,
-    "phone_number": None,
-    "time": None,
-},
-    "2026-07-30": {
-    "status": "available",
-    "customer_name": None,
-    "phone_number": None,
-    "time": None,
-},
-}
+
+
+def save_calendar():
+  with open('calendar.json','w') as file:
+    json.dump(calendar,file,indent=4)
+
+
+def load_calendar():
+  with open('calendar.json','r') as file:
+    return json.load(file)
+
+calendar =load_calendar()
+
+
 
 def collect_customer_message(state):
   print(">>> collect_customer_message")
@@ -119,13 +64,12 @@ def collect_customer_message(state):
 from langchain_core.tools import tool
 
 
-
 @tool
 def check_calendar(date : str):
   """
   Use this tool ONLY when the customer wants to know whether a date is available.
   Do NOT use this tool to make a booking.
-  """ 
+  """
   if date in calendar:
     return { 'status' : calendar[date]}
   else:
@@ -133,10 +77,12 @@ def check_calendar(date : str):
 
 
 @tool
-def book_appointment(date : str,time : str,customer_name : str ,phone_number : str):
+def book_appointment(date : str,time : str,customer_name : str ,phone_number : str,purpose : str):
   """
   Use this tool ONLY when the customer wants to book an appointment.
-  This tool reserves the date and stores the customer's name, phone number, and preferred time.
+
+  This tool reserves the appointment date and stores the customer's
+  name, phone number, preferred time, and appointment purpose.
   """
   if date in calendar:
     if calendar[date]['status'] == 'available':
@@ -144,11 +90,14 @@ def book_appointment(date : str,time : str,customer_name : str ,phone_number : s
       calendar[date]['customer_name'] = customer_name
       calendar[date]['phone_number'] = phone_number
       calendar[date]['time'] = time
+      calendar[date]['purpose'] = purpose
+
+      save_calendar()
 
       return{'status' : 'success',
              'customer_name': customer_name,
              'time': time,
-             'message' : f"Your appointment has been booked successfully for {date}."}
+             'message' : f"Your appointment for {'purpose'} has been booked successfully for {date}."}
 
     else:
       return {'status' : 'error',
@@ -164,7 +113,7 @@ def cancel_appointment(customer_name: str,date: str):
   """cancel an appointment booked by the customer and make the date available for booking"""
 
   print("cancel_appointment tool called")
-  
+
 
   if date in calendar:
     if calendar[date]['customer_name'].lower() == customer_name.lower() and calendar[date]['status']=='booked':
@@ -172,6 +121,9 @@ def cancel_appointment(customer_name: str,date: str):
       calendar[date]['customer_name'] = None
       calendar[date]['phone_number'] = None
       calendar[date]['time'] = None
+      calendar[date]['purpose'] = None
+
+      save_calendar()
 
       return{
           'status' : 'cancelled',
@@ -187,9 +139,77 @@ def cancel_appointment(customer_name: str,date: str):
       'message' : 'invalid date,please put in correct date'
     }
 
-model_with_tools = model.bind_tools([check_calendar,book_appointment,cancel_appointment])
-tool_node=ToolNode([check_calendar,book_appointment,cancel_appointment])
 
+
+@tool
+def view_appointments(date : str):
+  """
+View all appointments scheduled for a given date.
+Returns the customer's appointment details if the date is booked.
+"""
+  if date in calendar:
+    if calendar[date]['status'] == 'booked':
+      return {
+          'status' : 'success',
+          'messages': calendar[date]
+      }
+      save_calendar()
+    return{
+        'status' : 'success',
+        'messages' : f'No appointments for {date}'
+    }
+  return{
+      "status" : 'error',
+      'message' : 'invalid date'
+  }
+
+@tool
+def reschedule_appointment(old_date: str,new_date : str,customer_name: str):
+  """move an appointment from an old date to a new date
+the customer's details, appointment time, and purpose.
+"""
+  if old_date in calendar and new_date in calendar:
+    if calendar[old_date]['status'] != 'booked':
+      return  {'status': 'error',
+             'message' : 'There is no appointment for this date.'}
+
+    if calendar[old_date]['customer_name'].lower() != customer_name.lower():
+      return  {'status': 'error',
+             'message' : 'The appointment does not belong to this customer.'}
+
+    if calendar[new_date]['status'] != 'available':
+      return{'status': 'error',
+             'message' : 'The new date is already booked.'
+
+      }
+    appointment=calendar[old_date].copy()
+    calendar[old_date]['status'] = "available"
+    calendar[old_date]['customer_name'] = None
+    calendar[old_date]['phone_number'] = None
+    calendar[old_date]['time'] = None
+    calendar[old_date]['purpose'] = None
+    calendar[new_date]['status'] = "booked"
+    calendar[new_date]['customer_name'] = appointment['customer_name']
+    calendar[new_date]['phone_number'] = appointment['phone_number']
+    calendar[new_date]['time'] = appointment['time']
+    calendar[new_date]['purpose'] = appointment['purpose']
+
+    save_calendar()
+
+    return{'status': 'success',
+              'message' : f' {new_date} has been sucessfully booked,rescheduling is sucessful'}
+
+
+  return{ "status" : 'error',
+      'message' : 'invalid date'
+
+  }
+  
+
+
+model_with_tools = model.bind_tools([check_calendar,book_appointment,cancel_appointment,reschedule_appointment,view_appointments,
+])
+tool_node=ToolNode([check_calendar,book_appointment,cancel_appointment,reschedule_appointment,view_appointments])
 
 def khay_assistant(state):
   print(">>> khay_assistant")
@@ -207,6 +227,17 @@ Booking appointments.
 Cancelling appointments.
 Collecting any information needed to complete a booking.
 Handling the entire conversation whenever possible.
+If the customer wants to book an appointment, collect all the required information before calling the booking tool.
+Only use the view_appointments tool when responding to Tailor Khay, not to customers.
+
+The required information is:
+- appointment date
+- preferred time
+- customer name
+- phone number
+- appointment purpose
+
+If any of this information is missing, ask the customer for it. Do not make assumptions or guess missing information.
 
 Guidelines:
 Be friendly, professional, and polite.
@@ -266,30 +297,14 @@ def pricing (state):
       'messages' : [AIMessage(content = message)]
   }
 
-def should_continue(state):
-  if 'bye' in state['human_message'].lower().split(' '):
-
-      return {
-          'next_action': 'stop'
-      }
-
-
-  return{
-        'next_action' : 'continue'
-      }
-
-
-
 graph=StateGraph(GraphState)
 graph.add_node('khay_assistant', khay_assistant)
-graph.add_node('collect_customer_message', collect_customer_message)
+
 
 graph.add_node('pricing',pricing)
 graph.add_node('intent_router',intent_router)
-graph.add_node('continue_router', should_continue)
 graph.add_node('tools',tool_node)
-graph.add_edge(START,'collect_customer_message')
-graph.add_edge('collect_customer_message' , 'intent_router')
+graph.add_edge(START , 'intent_router')
 graph.add_conditional_edges ('intent_router',
                 lambda state : state['intent'],
                 {'pricing' : 'pricing',
@@ -298,22 +313,28 @@ graph.add_conditional_edges ('intent_router',
                  })
 graph.add_conditional_edges( 'khay_assistant', tools_condition)
 graph.add_edge('tools','khay_assistant')
-graph.add_edge('khay_assistant','continue_router')
-graph.add_conditional_edges('continue_router',
-                            lambda state : state['next_action'],
-                            {'continue' : 'collect_customer_message',
-                             'stop' : END}
-                            )
-
-
-
-graph.add_edge('pricing', 'continue_router')
+graph.add_edge('khay_assistant',END)
+graph.add_edge('pricing' , END)
 
 app=graph.compile(checkpointer=memory)
-app.invoke({ },
-           config = {
-               'configurable' : {
-                   'thread_id' : 'customer_001'
-               }
-           })
+
+while True:
+
+  user_inquiry = input('Enter your inquiry: ')
+
+  if user_inquiry.lower() == 'bye':
+    print('goodbye')
+
+    break
+
+  app.invoke({ 'human_message' : user_inquiry,
+  'messages' : [HumanMessage(content=user_inquiry)]
+  },
+            config = {
+                'configurable' : {
+                    'thread_id' : 'customer_001'
+                }
+            })
+
+
 
