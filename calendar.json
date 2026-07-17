@@ -49,11 +49,11 @@
         "purpose": null
     },
     "2026-07-24": {
-        "status": "available",
-        "customer_name": null,
-        "phone_number": null,
-        "time": null,
-        "purpose": null
+        "status": "booked",
+        "customer_name": "mary",
+        "phone_number": "08023882233",
+        "time": "11:20 AM",
+        "purpose": "Measurement"
     },
     "2026-07-26": {
         "status": "available",
@@ -63,10 +63,10 @@
         "purpose": null
     },
     "2026-07-30": {
-        "status": "booked",
-        "customer_name": "mary",
-        "phone_number": "08023882233",
-        "time": "11:20 AM",
-        "purpose": "Measurement"
+        "status": "available",
+        "customer_name": null,
+        "phone_number": null,
+        "time": null,
+        "purpose": null
     }
 }

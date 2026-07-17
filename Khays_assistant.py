@@ -50,6 +50,16 @@ def load_calendar():
 calendar =load_calendar()
 
 
+def load_measurement():
+  with open ('measurement.json','r') as file:
+    return json.load(file)
+
+measurements=load_measurement()
+
+def save_measurements():
+  with open ('measurement.json','w') as file:
+   json.dump(measurements,file,indent=4)
+
 
 def collect_customer_message(state):
   print(">>> collect_customer_message")
@@ -206,10 +216,158 @@ the customer's details, appointment time, and purpose.
   }
   
 
+@tool
+def update_appointment(date:str,customer_name: str,new_phone_number :str = None, new_purpose :str = None, new_appontment_time :str = None):
 
-model_with_tools = model.bind_tools([check_calendar,book_appointment,cancel_appointment,reschedule_appointment,view_appointments,
-])
-tool_node=ToolNode([check_calendar,book_appointment,cancel_appointment,reschedule_appointment,view_appointments])
+  """ help update client appointment details with the new information provided"""
+  if date in calendar:
+    if calendar[date]['status'] != 'booked':
+      return  {'status': 'error',
+             'message' : 'There is no appointment for this date.'}
+
+    if calendar[date]['customer_name'].lower() != customer_name.lower():
+      return  {'status': 'error',
+             'message' : 'The appointment does not belong to this customer.'}
+
+  
+    if new_phone_number is None and new_appointment_time is None and new_purpose is None :
+      return {
+    "status": "error",
+    "message": "No new information was provided to update."
+}
+  
+    if new_phone_number:
+      calendar[date]['phone_number'] = new_phone_number
+    if new_appointment_time:
+      calendar[date]['time'] = new_appointment_time
+    if new_purpose:
+      calendar[date]['purpose'] = new_purpose
+    save_calendar()
+    
+    
+    return{'status': 'success',
+              'message' : f' Your appointment has been sucessfuly updated'}
+
+
+  return{ "status" : 'error',
+      'message' : 'invalid date'
+
+  }
+
+@tool
+def show_all_appointments():
+  """Return all booked appointments and their details for Tailor Khay."""
+  appointments=[]
+  for date in calendar:
+    if calendar[date]['status'] =='booked':
+      appointments.append({'date' : date,
+                             'status' : calendar[date]['status'],
+                             'customer_name': calendar[date]['customer_name'],
+                               'phone_number': calendar[date]['phone_number'],
+                                  'time': calendar[date]['time'],
+                                     'purpose': calendar[date]['purpose']})
+
+
+
+  if not appointments:
+        return {
+              "status": "error",
+              "message": "There are no booked appointments."
+          }
+  return{
+            'status' : 'success',
+            'appointments': appointments
+        }
+
+@tool
+def save_customer_measurements(customer_name: str,
+                      bust : float =None ,
+                      waist : float =None,
+                      hip: float =None,
+                      shoulder:float =None,
+                      sleeve_length : float =None,
+                      full_length: float =None):
+  """get measurement from customer """
+
+
+  if customer_name not in measurements:
+    measurements[customer_name]={
+                        "bust": bust ,
+                        'waist' :waist,
+                        'hip' : hip,
+                        'shoulder': shoulder,
+                        'sleeve_length' : sleeve_length,
+                        "full_length":full_length
+
+      }
+
+    save_measurements()
+    return{
+           'status' : 'sucessfull',
+           'messages' : f'{customer_name} measurements has been sucessfully uploaded'
+       }
+  else:
+    return{
+       'status': 'error',
+       'message' : f'{customer_name} measurements exists,please call the update_measurement tool'
+   }
+
+@tool
+def update_measurements(customer_name: str,
+                      new_bust : float =None ,
+                      new_waist : float =None,
+                    new_hip: float =None,
+                      new_shoulder:float =None,
+                      new_sleeve_length : float =None,
+                      new_full_length: float =None):
+  """update customers measurement """
+  if customer_name in measurements:
+    if new_bust is not None:
+      measurements[customer_name]['bust']=new_bust
+    if new_waist is not None:
+      measurements[customer_name]['waist']=new_waist
+    if new_hip is not None:
+      measurements[customer_name]['hip']=new_hip
+    if new_shoulder is not None:
+      measurements[customer_name]['shoulder'] =new_shoulder
+    if new_sleeve_length is not None:
+      measurements[customer_name]['sleeve_length']=new_sleeve_length
+    if new_full_length is not None:
+      measurements[customer_name]['full_length'] = new_full_length
+
+
+    save_measurements()
+    return{
+          'status':' success',
+          'messages':'the measurement has been sucessfully updated'
+      }
+
+  else:
+    return{
+          'status' : 'error',
+          'messages' : f'{customer_name} measurements does not exist'
+      }
+
+@tool
+def view_measurements(customer_name: str):
+  """Return the stored body measurements of a customer to either the customers or tailor khay."""
+  
+  if customer_name in measurements:
+    return{
+        'status':'sucess',
+        'messages': measurements[customer_name ]}
+
+  else:
+    return{
+          'status' : 'error',
+          'messages' : f'{customer_name} measurements does not exist'
+      }
+
+
+model_with_tools = model.bind_tools([check_calendar,book_appointment,cancel_appointment,reschedule_appointment,view_appointments,update_appointment,
+show_all_appointments,save_customer_measurements,update_measurements,view_measurements])
+tool_node=ToolNode([check_calendar,book_appointment,cancel_appointment,reschedule_appointment,view_appointments,update_appointment,show_all_appointments,
+save_customer_measurements,update_measurements,view_measurements])
 
 def khay_assistant(state):
   print(">>> khay_assistant")
@@ -219,6 +377,13 @@ def khay_assistant(state):
 
 You represent Tailor Khay and speak on her behalf. Customers should feel like they are talking directly to Tailor Khay's business.
 
+Tailor Khay is the owner of the tailoring business.
+
+When the user identifies themselves as Tailor Khay, you may use the available tools to access customer appointments, measurements, orders, and other business records.
+
+Customers may only access or modify their own appointments, measurements, and orders.
+
+Never reveal one customer's information to another customer.
 Your responsibilities include:
 Greeting customers warmly and professionally.
 Answering questions about appointments and Tailor Khay's services.
@@ -228,14 +393,14 @@ Cancelling appointments.
 Collecting any information needed to complete a booking.
 Handling the entire conversation whenever possible.
 If the customer wants to book an appointment, collect all the required information before calling the booking tool.
-Only use the view_appointments tool when responding to Tailor Khay, not to customers.
+.
 
 The required information is:
-- appointment date
-- preferred time
-- customer name
-- phone number
-- appointment purpose
+appointment date
+preferred time
+customer name
+phone number
+appointment purpose
 
 If any of this information is missing, ask the customer for it. Do not make assumptions or guess missing information.
 
@@ -256,6 +421,32 @@ Collect any necessary details about the customer's request before handing the co
 Once all necessary details have been collected, inform the customer that their request has been forwarded to Tailor Khay for pricing.
 
 Your goal is to complete as much of the conversation as possible before involving Tailor Khay.
+
+Note:
+Appointments:
+Tailor Khay may view all appointments.
+Customers may only view their own appointments.
+
+Measurements:
+Tailor Khay may view and update any customer's measurements.
+Customers may only view or update their own measurements.
+Measurement Rules:
+
+When Tailor Khay asks to view a customer's measurements, ALWAYS call the view_measurements tool, even if you think the customer may not exist.
+
+When Tailor Khay asks to save measurements for a customer, ALWAYS call the save_customer_measurements tool after collecting any missing measurement values.
+
+Never assume whether a customer's measurements already exist. Let the tool determine this.
+
+If the save tool reports that measurements already exist, explain that the measurements already exist and suggest updating them instead.
+
+ When updating measurements, use the update_measurements tool.
+
+Orders:
+Tailor Khay may view and manage all orders.
+Customers may only view or update their own orders where appropriate.
+
+
       '''),
 
      MessagesPlaceholder('messages')
@@ -324,6 +515,7 @@ while True:
 
   if user_inquiry.lower() == 'bye':
     print('goodbye')
+
 
     break
 
