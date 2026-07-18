@@ -60,6 +60,17 @@ def save_measurements():
   with open ('measurement.json','w') as file:
    json.dump(measurements,file,indent=4)
 
+def load_orders():
+  with open('orders.json','r') as file:
+    return json.load(file)
+
+def save_orders():
+  with open ('orders.json','w') as file:
+    json.dump(orders,file,indent=4)
+
+orders=load_orders()
+
+
 
 def collect_customer_message(state):
   print(">>> collect_customer_message")
@@ -363,11 +374,108 @@ def view_measurements(customer_name: str):
           'messages' : f'{customer_name} measurements does not exist'
       }
 
+def generate_order_number():
+  next_number = len(orders) + 1
+  order_id = f"ORD_{next_number:03}"
+  return order_id
+
+@tool
+def create_order(
+    customer_name: str,
+    phone_number: str,
+    style_description: str,
+    customer_provided_fabric: bool,
+    fabric_details: str,
+    price: float,
+    amount_paid: float,
+    delivery_date: str,
+    notes: str = ""
+):
+  """Create a new customer order and automatically generate an order number."""
+
+
+  order_number = generate_order_number()
+
+  balance = price - amount_paid
+  status='pending'
+
+  orders[order_number] = {
+      'customer_name': customer_name,
+      'phone_number': phone_number,
+      'style_description': style_description,
+      'customer_provided_fabric': customer_provided_fabric,
+      'fabric_details': fabric_details,
+      'price': price,
+      'amount_paid': amount_paid,
+      'delivery_date':delivery_date,
+      'notes':notes,
+      'balance': balance,
+      'status' :status
+      
+  }
+  save_orders()
+  return{
+      'status':'sucess',
+      'order_number' : order_number,
+      'messages' : f'{customer_name}s order has been sucessfully taken and her order number is{order_number}'
+  }
+
+@tool
+def view_order(customer_name: str = None,
+    order_number: str = None):
+  """ Return customers orders details"""
+
+  if customer_name is not None:
+
+    matching_orders = []
+    for order_number in orders:
+      if customer_name == orders[order_number]['customer_name']:
+        matching_orders.append({'order_number':order_number,
+                              **orders[order_number]})
+    if not matching_orders:
+        return{
+            'status': 'error',
+        'messages' :'the customer has no orders'
+        }
+    return {
+          'status': 'success',
+          'count': len(matching_orders),
+          'orders':matching_orders 
+      }
+
+  if order_number is not None:
+    if order_number in orders:
+
+      return{
+      
+    "status": "success",
+    "orders": [{
+        "order_number": order_number,
+        **orders[order_number]
+    }]
+}
+      
+    
+    return{
+    'status': 'error',
+    'messages' : 'order not found'
+  }
+
+  return {
+    "status": "error",
+    "message": "Please provide either a customer name or an order number."
+}
+
+
+  
+
+
+
 
 model_with_tools = model.bind_tools([check_calendar,book_appointment,cancel_appointment,reschedule_appointment,view_appointments,update_appointment,
-show_all_appointments,save_customer_measurements,update_measurements,view_measurements])
+show_all_appointments,save_customer_measurements,update_measurements,view_measurements,create_order,view_order])
 tool_node=ToolNode([check_calendar,book_appointment,cancel_appointment,reschedule_appointment,view_appointments,update_appointment,show_all_appointments,
-save_customer_measurements,update_measurements,view_measurements])
+save_customer_measurements,update_measurements,view_measurements,create_order,view_order])
 
 def khay_assistant(state):
   print(">>> khay_assistant")
