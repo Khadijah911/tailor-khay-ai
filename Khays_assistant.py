@@ -466,6 +466,61 @@ def view_order(customer_name: str = None,
     "message": "Please provide either a customer name or an order number."
 }
 
+@tool
+def update_order(order_number :str ,
+new_style_description : str =None,
+new_customer_provided_fabric : bool =None,
+new_fabric_details:str =None,
+new_price : float =None,
+new_amount_paid : float =None,
+new_delivery_date : str  =None,
+new_notes : str =None,
+
+):
+
+ 
+
+  """update customers order """
+  if order_number in orders:
+
+    if new_style_description is not None:
+      orders[order_number]['style_description'] = new_style_description
+    if new_customer_provided_fabric is not None:
+      orders[order_number]['customer_provided_fabric'] = new_customer_provided_fabric
+    if new_fabric_details is not None:
+      orders[order_number]['fabric_details'] =new_fabric_details
+    if new_price is not None:
+      orders[order_number]['price']=new_price
+    
+    if new_delivery_date is not None:
+      orders[order_number]['delivery_date']= new_delivery_date
+    if new_notes is not None:
+      orders[order_number]['notes']=new_notes
+
+    if new_amount_paid is not None:
+      orders[order_number]['amount_paid']=orders[order_number]['amount_paid'] + new_amount_paid
+      
+
+    
+    orders[order_number]['balance'] = orders[order_number]['price'] - orders[order_number]['amount_paid']
+
+
+    save_orders()
+    return {
+        
+          'status': 'success',
+          'messages':'The order has been sucessfully updated'
+        
+    }
+
+  else:
+    return{
+          'status' : 'error',
+          'messages' : f' order {order_number} does not exist'
+      }
+
+
+
 
   
 
@@ -473,9 +528,9 @@ def view_order(customer_name: str = None,
 
 
 model_with_tools = model.bind_tools([check_calendar,book_appointment,cancel_appointment,reschedule_appointment,view_appointments,update_appointment,
-show_all_appointments,save_customer_measurements,update_measurements,view_measurements,create_order,view_order])
+show_all_appointments,save_customer_measurements,update_measurements,view_measurements,create_order,view_order,update_order])
 tool_node=ToolNode([check_calendar,book_appointment,cancel_appointment,reschedule_appointment,view_appointments,update_appointment,show_all_appointments,
-save_customer_measurements,update_measurements,view_measurements,create_order,view_order])
+save_customer_measurements,update_measurements,view_measurements,create_order,view_order,update_order])
 
 def khay_assistant(state):
   print(">>> khay_assistant")

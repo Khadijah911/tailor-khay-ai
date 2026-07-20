@@ -6,10 +6,10 @@
         "customer_provided_fabric": false,
         "fabric_details": "Royal blue mesh",
         "price": 55000,
-        "amount_paid": 30000,
-        "balance": 25000,
+        "amount_paid": 50000.0,
+        "balance": 5000.0,
         "status": "Pending",
         "delivery_date": "2026-08-10",
-        "notes": "Add lycra lining."
+        "notes": "Customer requested a hidden zipper."
     }
 }
