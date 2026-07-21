@@ -395,9 +395,14 @@ def create_order(
 
 
   order_number = generate_order_number()
-
   balance = price - amount_paid
   status='pending'
+  payment_history = [
+    {
+        "amount": amount_paid
+    }
+]
+
 
   orders[order_number] = {
       'customer_name': customer_name,
@@ -410,7 +415,9 @@ def create_order(
       'delivery_date':delivery_date,
       'notes':notes,
       'balance': balance,
-      'status' :status
+      'status' :status,
+      'payment_history' : payment_history,
+      'notes': [notes] if notes else []
       
   }
   save_orders()
@@ -480,7 +487,19 @@ new_notes : str =None,
 
  
 
-  """update customers order """
+  """
+Update an existing order.
+
+For `new_amount_paid`, pass ONLY the additional payment being made,
+NOT the customer's total amount paid so far.
+
+Example:
+- Customer has paid ₦20,000.
+- Customer pays another ₦10,000.
+- Pass new_amount_paid=10000.
+The tool will calculate the new total automatically.
+"""
+
   if order_number in orders:
 
     if new_style_description is not None:
@@ -494,13 +513,14 @@ new_notes : str =None,
     
     if new_delivery_date is not None:
       orders[order_number]['delivery_date']= new_delivery_date
+    
     if new_notes is not None:
-      orders[order_number]['notes']=new_notes
+      orders[order_number]['notes'].append(new_notes)
 
     if new_amount_paid is not None:
+   
       orders[order_number]['amount_paid']=orders[order_number]['amount_paid'] + new_amount_paid
-      
-
+      orders[order_number]["payment_history"].append({ "amount": new_amount_paid})
     
     orders[order_number]['balance'] = orders[order_number]['price'] - orders[order_number]['amount_paid']
 
@@ -519,18 +539,100 @@ new_notes : str =None,
           'messages' : f' order {order_number} does not exist'
       }
 
+def view_orders_by_status(status: str):
+  """ get the order details based on the order status"""
+  orders_by_status=[]
+  for order_number in orders:
+    if orders[order_number]['status'].lower()== status.lower():
+      orders_by_status.append({'order_number':order_number,
+                           **orders[order_number]})
+  if not orders_by_status:
+    return {
+                "status": "error",
+                "messages": f"No orders with status '{status}' were found."
+            }
 
 
+  return {
+            "status": "success",
+            "count": len(orders_by_status),
+            "orders": orders_by_status
+        }
 
-  
+
+def view_orders_by_delivery_date(delivery_date: str):
+
+  """Return all orders with the specified delivery date."""
+
+  orders_by_delivery_date=[]
+  for order_number in orders:
+    if orders[order_number]['delivery_date'].lower()== delivery_date.lower():
+      orders_by_delivery_date.append({'order_number':order_number,
+                           **orders[order_number]})
+  if not orders_by_delivery_date:
+    return {
+                "status": "error",
+                "messages": f"No orders with due date '{delivery_date}' were found."
+            }
 
 
+  return {
+            "status": "success",
+            "count": len(orders_by_delivery_date),
+            "orders": orders_by_delivery_date
+        }
 
+@tool
+def view_payment_history (order_number : str):
+  """Get order payment history"""
+  if order_number in orders:
+    return{
+        'status': 'success',
+    "order_number": order_number,
+    "payment_history": orders[order_number]["payment_history"],
+    "amount_paid": orders[order_number]["amount_paid"],
+    "balance": orders[order_number]["balance"]
+    }
+  return{
+      'status':'error',
+      'message' : f' order {order_number} doesnt exist'
+}
+
+@tool
+def update_order_status (order_number : str,new_status: str):
+  """update orders' status"""
+  VALID_STATUSES = [
+    "Pending",
+    "Cutting",
+    "Sewing",
+    "Ready for Fitting",
+    "Ready for Pickup",
+    "Delivered",
+    "Cancelled"
+]
+  if order_number in orders:
+    if new_status in VALID_STATUSES:
+      orders[order_number]['status']=new_status
+      save_orders()
+      return{
+          'status' : 'success',
+          'messages': f'order {order_number} has changed to {new_status}'
+      }
+    return{
+        'status' : 'error',
+        'messages': 'the new status is invalid'
+    }
+  return{
+      'status':'error',
+      'messages' : f' order {order_number} doesnt exist'
+  }
 
 model_with_tools = model.bind_tools([check_calendar,book_appointment,cancel_appointment,reschedule_appointment,view_appointments,update_appointment,
-show_all_appointments,save_customer_measurements,update_measurements,view_measurements,create_order,view_order,update_order])
+show_all_appointments,save_customer_measurements,update_measurements,view_measurements,create_order,view_order,update_order,view_orders_by_status,
+view_orders_by_delivery_date,view_payment_history,update_order_status])
 tool_node=ToolNode([check_calendar,book_appointment,cancel_appointment,reschedule_appointment,view_appointments,update_appointment,show_all_appointments,
-save_customer_measurements,update_measurements,view_measurements,create_order,view_order,update_order])
+save_customer_measurements,update_measurements,view_measurements,create_order,view_order,update_order,view_orders_by_status,view_orders_by_delivery_date,
+view_payment_history,update_order_status])
 
 def khay_assistant(state):
   print(">>> khay_assistant")

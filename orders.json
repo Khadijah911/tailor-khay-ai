@@ -11,5 +11,55 @@
         "status": "Pending",
         "delivery_date": "2026-08-10",
         "notes": "Customer requested a hidden zipper."
+    },
+    "ORD_002": {
+        "customer_name": "Zainab",
+        "phone_number": "08035556677",
+        "style_description": "Boubou gown",
+        "customer_provided_fabric": true,
+        "fabric_details": "Ankara",
+        "price": 40000.0,
+        "amount_paid": 40000.0,
+        "delivery_date": "2026-08-20",
+        "notes": [
+            "Customer wants side pockets.",
+            "Customer wants side pockets. Customer also wants hidden pockets."
+        ],
+        "balance": 0.0,
+        "status": "Sewing",
+        "payment_history": [
+            {
+                "amount": 15000.0
+            },
+            {
+                "amount": 25000.0
+            }
+        ]
+    },
+    "ORD_003": {
+        "customer_name": "Aisha",
+        "phone_number": "08031112222",
+        "style_description": "Senator gown",
+        "customer_provided_fabric": false,
+        "fabric_details": "Black crepe",
+        "price": 50000.0,
+        "amount_paid": 60000.0,
+        "delivery_date": "2026-08-25",
+        "notes": [
+            "Customer wants long sleeves."
+        ],
+        "balance": -10000.0,
+        "status": "pending",
+        "payment_history": [
+            {
+                "amount": 20000.0
+            },
+            {
+                "amount": 30000.0
+            },
+            {
+                "amount": 10000.0
+            }
+        ]
     }
 }
