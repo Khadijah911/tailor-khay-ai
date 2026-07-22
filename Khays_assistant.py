@@ -396,7 +396,7 @@ def create_order(
 
   order_number = generate_order_number()
   balance = price - amount_paid
-  status='pending'
+  
   payment_history = [
     {
         "amount": amount_paid
@@ -415,7 +415,6 @@ def create_order(
       'delivery_date':delivery_date,
       'notes':notes,
       'balance': balance,
-      'status' :status,
       'payment_history' : payment_history,
       'notes': [notes] if notes else []
       
@@ -518,9 +517,16 @@ The tool will calculate the new total automatically.
       orders[order_number]['notes'].append(new_notes)
 
     if new_amount_paid is not None:
-   
-      orders[order_number]['amount_paid']=orders[order_number]['amount_paid'] + new_amount_paid
-      orders[order_number]["payment_history"].append({ "amount": new_amount_paid})
+      total_paid= orders[order_number]['amount_paid'] + new_amount_paid
+      if total_paid > orders[order_number]["price"]:
+        return {
+            "status": "error",
+            "message": ("Payment exceeds the total order price."
+             f"Outstanding balance is ₦{orders[order_number]['balance']:,.0f}.")
+        }
+      else:
+        orders[order_number]['amount_paid']=orders[order_number]['amount_paid'] + new_amount_paid
+        orders[order_number]["payment_history"].append({ "amount": new_amount_paid})
     
     orders[order_number]['balance'] = orders[order_number]['price'] - orders[order_number]['amount_paid']
 
@@ -627,12 +633,139 @@ def update_order_status (order_number : str,new_status: str):
       'messages' : f' order {order_number} doesnt exist'
   }
 
+
+def get_customers_profile(customer_name : str):
+
+  """Get customers information, orders,measurements,appointments """
+  customer_orders = []
+
+  for order_number in orders:
+    if customer_name == orders[order_number]["customer_name"]:
+      customer_orders.append({
+                  "order_number": order_number,
+                   **orders[order_number]
+                })
+
+  appointments=[]
+  for date in calendar:
+
+    if calendar[date]['customer_name'] == customer_name:
+      appointments.append({"date": date,
+                   **calendar[date]
+                })
+
+  customer_measurements=measurements.get(customer_name)
+
+  if (not customer_orders and not appointments and customer_measurements is None):
+    return{'status': 'error',
+           'messages' : f'No recoreds found for{customer_name}'}
+
+
+  return{
+      'status' : 'success',
+      'customer_name' : customer_name,
+      'customers_orders':customer_orders,
+      'customers_appointments' : appointments,
+      'customers_measurements' : customer_measurements
+  }
+
+@tool
+def get_business_summary():
+  """
+Get a summary of the tailoring business.
+
+Returns:
+Total number of orders
+Number of pending, delivered,ready for fitting,ready for pickup and cancelled orders
+Total revenue
+Total amount paid by customers
+Total outstanding balance
+
+"""
+
+
+  pending_orders=0
+  delivered_orders=0
+  cancelled_orders = 0
+
+  ready_for_fitting_orders = 0
+  ready_for_pickup_orders = 0
+
+  total_revenue = 0
+
+  total_paid = 0
+  outstanding_balance = 0
+
+
+
+  for order_number in orders:
+    total_revenue += orders[order_number]['price']
+    total_paid += orders[order_number]['amount_paid']
+    outstanding_balance += orders[order_number]['balance']
+
+    if orders[order_number]['status']=='Pending':
+      pending_orders += 1
+    if orders[order_number]['status'] == 'Delivered':
+      delivered_orders += 1
+
+    if orders[order_number]['status'] == 'Cancelled':
+      cancelled_orders += 1
+    if orders[order_number]['status'] == 'Ready for Fitting':
+      ready_for_fitting_orders +=  1
+    if orders[order_number]['status'] == 'Ready for Pickup':
+      ready_for_pickup_orders += 1
+    
+
+  return{
+      'status' : 'success',
+      'total_orders': len (orders),
+      'pending_orders': pending_orders,
+      'delivered_orders': delivered_orders,
+      'cancelled_orders' : cancelled_orders,
+      'ready_for_fitting_orders' : ready_for_fitting_orders,
+      'ready_for_pickup_orders' : ready_for_pickup_orders,
+      'total_revenue' : total_revenue,
+
+      'total_paid' : total_paid,
+      'outstanding_balance' : outstanding_balance
+      
+  }
+
+
+@tool
+def get_customers_with_outstanding_balance():
+  """Get the customers with outstanding balance"""
+
+  customers_with_outstanding_balance=[]
+
+  for order_number in orders:
+    if orders[order_number]['balance'] > 0:
+      customers_with_outstanding_balance.append({
+          'order_number':order_number,
+          'customer_name' : orders[order_number]['customer_name'],
+          'outstanding_balance' : orders[order_number]['balance']
+          
+      })
+  if not customers_with_outstanding_balance:
+      return{
+          'status' : 'success',
+          'messages': 'there are no customers with outstanding balance'
+      }
+  return{
+      'status':'success',
+      'count' : len(customers_with_outstanding_balance),
+      'customers_with_outstanding_balance' : customers_with_outstanding_balance
+  }
+     
+
+
+
 model_with_tools = model.bind_tools([check_calendar,book_appointment,cancel_appointment,reschedule_appointment,view_appointments,update_appointment,
 show_all_appointments,save_customer_measurements,update_measurements,view_measurements,create_order,view_order,update_order,view_orders_by_status,
-view_orders_by_delivery_date,view_payment_history,update_order_status])
+view_orders_by_delivery_date,view_payment_history,update_order_status,get_customers_profile,get_business_summary,get_customers_with_outstanding_balance])
 tool_node=ToolNode([check_calendar,book_appointment,cancel_appointment,reschedule_appointment,view_appointments,update_appointment,show_all_appointments,
 save_customer_measurements,update_measurements,view_measurements,create_order,view_order,update_order,view_orders_by_status,view_orders_by_delivery_date,
-view_payment_history,update_order_status])
+view_payment_history,update_order_status,get_customers_profile,get_business_summary,get_customers_with_outstanding_balance])
 
 def khay_assistant(state):
   print(">>> khay_assistant")
@@ -710,6 +843,17 @@ If the save tool reports that measurements already exist, explain that the measu
 Orders:
 Tailor Khay may view and manage all orders.
 Customers may only view or update their own orders where appropriate.
+
+The assistant can also answer business analytics questions such as:
+
+total revenue
+total amount paid by customers
+outstanding balances
+number of orders
+business summaries
+pending orders
+delivered orders
+cancelled orders
 
 
       '''),

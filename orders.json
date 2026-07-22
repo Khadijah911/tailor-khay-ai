@@ -39,23 +39,19 @@
     "ORD_003": {
         "customer_name": "Aisha",
         "phone_number": "08031112222",
-        "style_description": "Senator gown",
+        "style_description": "mesh gown",
         "customer_provided_fabric": false,
-        "fabric_details": "Black crepe",
+        "fabric_details": "flowery mesh",
         "price": 50000.0,
-        "amount_paid": 60000.0,
+        "amount_paid": 30000.0,
         "delivery_date": "2026-08-25",
         "notes": [
             "Customer wants long sleeves."
         ],
-        "balance": -10000.0,
-        "status": "pending",
+        "balance": 20000.0,
         "payment_history": [
             {
                 "amount": 20000.0
-            },
-            {
-                "amount": 30000.0
             },
             {
                 "amount": 10000.0
