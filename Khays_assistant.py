@@ -397,6 +397,7 @@ def create_order(
   order_number = generate_order_number()
   balance = price - amount_paid
   
+  
   payment_history = [
     {
         "amount": amount_paid
@@ -415,6 +416,7 @@ def create_order(
       'delivery_date':delivery_date,
       'notes':notes,
       'balance': balance,
+      "status": "Pending",
       'payment_history' : payment_history,
       'notes': [notes] if notes else []
       
@@ -756,22 +758,85 @@ def get_customers_with_outstanding_balance():
       'count' : len(customers_with_outstanding_balance),
       'customers_with_outstanding_balance' : customers_with_outstanding_balance
   }
+
+from datetime import datetime
+@tool
+def get_orders_by_date_range(start_date : str ,end_date : str):
+  """
+Get all orders whose delivery date falls within a date range.
+
+Args:
+    start_date: Start date in YYYY-MM-DD format.
+    end_date: End date in YYYY-MM-DD format.
+"""
+  filtered_orders=[]
+  start_date_str = start_date
+  end_date_str = end_date
+  start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
+  end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
+  
+  for order_number in orders:
+    delivery_date=orders[order_number]['delivery_date']
+    delivery_date= datetime.strptime(delivery_date, '%Y-%m-%d').date()
+    if start_date <= delivery_date <= end_date:
+      filtered_orders.append({'order_number': order_number,
+                              **orders[order_number]
+      })
+  if not filtered_orders:
+      return{
+    "status": "success",
+    "start_date": start_date,
+    "end_date": end_date,
+    "count": 0,
+    "orders": []
+ }
+  return{
+    'status' : 'success',
+    "start_date": start_date_str,
+          "end_date": end_date_str,
+          "count": len(filtered_orders),
+    'orders' : filtered_orders
+}
+
+
+
+
      
 
 
 
 model_with_tools = model.bind_tools([check_calendar,book_appointment,cancel_appointment,reschedule_appointment,view_appointments,update_appointment,
 show_all_appointments,save_customer_measurements,update_measurements,view_measurements,create_order,view_order,update_order,view_orders_by_status,
-view_orders_by_delivery_date,view_payment_history,update_order_status,get_customers_profile,get_business_summary,get_customers_with_outstanding_balance])
+view_orders_by_delivery_date,view_payment_history,update_order_status,get_customers_profile,get_business_summary,get_customers_with_outstanding_balance,
+get_orders_by_date_range])
 tool_node=ToolNode([check_calendar,book_appointment,cancel_appointment,reschedule_appointment,view_appointments,update_appointment,show_all_appointments,
 save_customer_measurements,update_measurements,view_measurements,create_order,view_order,update_order,view_orders_by_status,view_orders_by_delivery_date,
-view_payment_history,update_order_status,get_customers_profile,get_business_summary,get_customers_with_outstanding_balance])
+view_payment_history,update_order_status,get_customers_profile,get_business_summary,get_customers_with_outstanding_balance,get_orders_by_date_range
+])
+
+from datetime import date
+
+today = date.today().isoformat()
 
 def khay_assistant(state):
   print(">>> khay_assistant")
 
   prompt = ChatPromptTemplate.from_messages([
-      ('system' , '''You are Tailor Khay's AI assistant.
+      ('system' , f'''
+      You are Tailor Khay's AI assistant.
+
+Today's date is {today}.
+
+When the user refers to:
+- today
+- tomorrow
+- yesterday
+- this week
+- next week
+- this month
+- next month
+
+Always interpret these relative to today's date ({today}).
 
 You represent Tailor Khay and speak on her behalf. Customers should feel like they are talking directly to Tailor Khay's business.
 
@@ -854,6 +919,23 @@ business summaries
 pending orders
 delivered orders
 cancelled orders
+
+For requests about orders due within a particular period, always use the get_orders_by_date_range tool.
+
+Examples include:
+Orders due today
+Orders due tomorrow
+Orders due this week
+Orders due next week
+Orders due this month
+Orders due next month
+Orders due between two dates
+
+When using this tool, convert the requested period into a start date and an end date in YYYY-MM-DD format before calling the tool.
+
+Never guess whether orders exist.
+
+Always use the appropriate tool to retrieve order information before answering questions about orders.
 
 
       '''),
