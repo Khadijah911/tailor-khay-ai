@@ -292,37 +292,108 @@ def show_all_appointments():
         }
 
 @tool
-def save_customer_measurements(customer_name: str,
-                      bust : float =None ,
-                      waist : float =None,
-                      hip: float =None,
-                      shoulder:float =None,
-                      sleeve_length : float =None,
-                      full_length: float =None):
-  """get measurement from customer """
+def save_customer_measurements(
+    customer_name: str,
+    phone_number: str,
+
+    bust: float = None,
+    waist: float = None,
+    hip: float = None,
+
+    full_length: float = None,
+    half_length: float = None,
+
+    blouse_length: float = None,
+
+    shoulder: float = None,
+    sleeve_length: float = None,
+    round_sleeve: float = None,
+
+    shoulder_to_nipple: float = None,
+    shoulder_to_underbust: float = None,
+
+    waist_to_hip: float = None,
+
+    lap: float = None,
+    trouser_length: float = None,
+
+    nipple_to_nipple: float = None,
+    upper_cleavage: float = None,
+    lower_cleavage: float = None,
+):
 
 
-  if customer_name not in measurements:
-    measurements[customer_name]={
-                        "bust": bust ,
-                        'waist' :waist,
-                        'hip' : hip,
-                        'shoulder': shoulder,
-                        'sleeve_length' : sleeve_length,
-                        "full_length":full_length
 
+    """Save a new customer's body measurements."""
+  
+    connection = sqlite3.connect("tailor_khay.db")
+    connection.row_factory = sqlite3.Row
+    cursor = connection.cursor()
+
+    cursor.execute(
+            """
+            SELECT *
+            FROM measurements
+            WHERE phone_number = ?
+            """,
+            (phone_number,)
+        )
+
+    row = cursor.fetchone()
+
+
+    if row is not None:
+
+
+      connection.close()
+      return{
+          'status': 'error',
+          'message' : f'{customer_name} measurements exists,please call the update_measurement tool'
       }
 
-    save_measurements()
+
+    cursor.execute(
+            """
+            INSERT INTO measurements (
+        customer_name,phone_number,
+    bust,waist,hip,
+    full_length,half_length,blouse_length,
+    shoulder,sleeve_length,round_sleeve,
+    shoulder_to_nipple,shoulder_to_underbust,
+    waist_to_hip,lap,
+    trouser_length,nipple_to_nipple,upper_cleavage,
+    lower_cleavage
+    )
+    VALUES (
+        ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
+        
+    )
+
+            
+            """,
+            (
+        customer_name,phone_number,
+    bust,waist,hip,
+    full_length,half_length,blouse_length,
+    shoulder,sleeve_length,round_sleeve,
+    shoulder_to_nipple,shoulder_to_underbust,
+    waist_to_hip,lap,
+    trouser_length,nipple_to_nipple,upper_cleavage,
+    lower_cleavage
+    )
+            
+          
+        )
+
+    connection.commit()
+    connection.close()
     return{
-           'status' : 'sucessfull',
-           'messages' : f'{customer_name} measurements has been sucessfully uploaded'
-       }
-  else:
-    return{
-       'status': 'error',
-       'message' : f'{customer_name} measurements exists,please call the update_measurement tool'
-   }
+              'status' : 'successful',
+              'messages' : f"{customer_name}'s measurements have been successfully uploaded"
+          }
+
+
+
 
 @tool
 def update_measurements(customer_name: str,
