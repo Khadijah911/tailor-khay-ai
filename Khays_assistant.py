@@ -18,6 +18,7 @@ from langchain_openai import ChatOpenAI
 from langgraph.prebuilt import ToolNode,tools_condition
 import os
 import json
+import sqlite3
 
 api_key = os.getenv("OPENAI_API_KEY")
 model = ChatOpenAI(
@@ -359,20 +360,56 @@ def update_measurements(customer_name: str,
           'messages' : f'{customer_name} measurements does not exist'
       }
 
+
+
+connection = sqlite3.connect("tailor_khay.db")
+connection.row_factory = sqlite3.Row
+cursor = connection.cursor()
+
+
+
+import sqlite3
+
 @tool
 def view_measurements(customer_name: str):
-  """Return the stored body measurements of a customer to either the customers or tailor khay."""
-  
-  if customer_name in measurements:
-    return{
-        'status':'sucess',
-        'messages': measurements[customer_name ]}
+    """Return the stored body measurements of a customer."""
 
-  else:
-    return{
-          'status' : 'error',
-          'messages' : f'{customer_name} measurements does not exist'
-      }
+    connection = sqlite3.connect("tailor_khay.db")
+
+    connection.row_factory = sqlite3.Row
+
+    cursor = connection.cursor()
+
+    cursor.execute(
+        """
+        SELECT *
+        FROM measurements
+        WHERE customer_name = ?
+        """,
+        (customer_name,)
+    )
+
+    row = cursor.fetchone()
+
+    connection.close()
+
+    if row is None:
+        return {
+            "status": "error",
+            "messages": f"{customer_name} measurements do not exist"
+        }
+
+    measurements = dict(row)
+
+    return {
+        "status": "success",
+        "messages": measurements
+    }
+
+
+    
+
+
 
 def generate_order_number():
   next_number = len(orders) + 1
