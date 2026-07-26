@@ -333,31 +333,93 @@ def update_measurements(customer_name: str,
                       new_sleeve_length : float =None,
                       new_full_length: float =None):
   """update customers measurement """
-  if customer_name in measurements:
-    if new_bust is not None:
-      measurements[customer_name]['bust']=new_bust
-    if new_waist is not None:
-      measurements[customer_name]['waist']=new_waist
-    if new_hip is not None:
-      measurements[customer_name]['hip']=new_hip
-    if new_shoulder is not None:
-      measurements[customer_name]['shoulder'] =new_shoulder
-    if new_sleeve_length is not None:
-      measurements[customer_name]['sleeve_length']=new_sleeve_length
-    if new_full_length is not None:
-      measurements[customer_name]['full_length'] = new_full_length
+
+  connection = sqlite3.connect("tailor_khay.db")
+  connection.row_factory = sqlite3.Row
+  cursor = connection.cursor()
+
+  cursor.execute(
+        """
+        SELECT *
+        FROM measurements
+        WHERE customer_name = ?
+        """,
+        (customer_name,)
+    )
+   
+
+  row = cursor.fetchone()
+
+    
+  if row is None:
+      return {
+            "status": "error",
+            "messages": f"{customer_name} measurements do not exist"
+        }
+  
+  if new_bust is not None:
+    cursor.execute(
+        """
+      UPDATE measurements
+      SET bust = ? 
+      WHERE customer_name = ?;
+      
+      """, (new_bust,customer_name)
+    )
+
+  if new_waist is not None:
+      cursor.execute(
+        """
+      UPDATE measurements
+      SET waist = ? 
+      WHERE customer_name = ?;
+      
+      """, (new_waist,customer_name)
+      )
+  if new_hip is not None:
+      cursor.execute(
+        """
+      UPDATE measurements
+      SET hip = ? 
+      WHERE customer_name = ?;
+      
+      """, (new_hip,customer_name)
+      )
+  if new_shoulder is not None:
+      cursor.execute(
+        """
+      UPDATE measurements
+      SET shoulder = ? 
+      WHERE customer_name = ?;
+      
+      """, (new_shoulder,customer_name)
+      )
+  if new_sleeve_length is not None:
+      cursor.execute(
+        """
+      UPDATE measurements
+      SET sleeve_length = ? 
+      WHERE customer_name = ?;
+
+      """, (new_sleeve_length,customer_name)
+      )
+  if new_full_length is not None:
+      cursor.execute(
+        """
+      UPDATE measurements
+      SET full_length = ? 
+      WHERE customer_name = ?;
+
+      """,
+      (new_full_length,customer_name)
+      )
 
 
-    save_measurements()
-    return{
+  connection.commit()
+  connection.close()
+  return{
           'status':' success',
           'messages':'the measurement has been sucessfully updated'
-      }
-
-  else:
-    return{
-          'status' : 'error',
-          'messages' : f'{customer_name} measurements does not exist'
       }
 
 
