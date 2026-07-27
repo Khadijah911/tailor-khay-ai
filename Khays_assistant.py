@@ -540,10 +540,6 @@ def view_measurements(customer_name: str):
     }
 
 
-    
-
-
-
 def generate_order_number():
   next_number = len(orders) + 1
   order_id = f"ORD_{next_number:03}"
