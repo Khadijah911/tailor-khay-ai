@@ -19,6 +19,8 @@ from langgraph.prebuilt import ToolNode,tools_condition
 import os
 import json
 import sqlite3
+from datetime import datetime, timedelta
+from calendar_auth import get_calendar_service
 
 api_key = os.getenv("OPENAI_API_KEY")
 model = ChatOpenAI(
@@ -106,27 +108,36 @@ def book_appointment(date : str,time : str,customer_name : str ,phone_number : s
   This tool reserves the appointment date and stores the customer's
   name, phone number, preferred time, and appointment purpose.
   """
-  if date in calendar:
-    if calendar[date]['status'] == 'available':
-      calendar[date]['status'] = "booked"
-      calendar[date]['customer_name'] = customer_name
-      calendar[date]['phone_number'] = phone_number
-      calendar[date]['time'] = time
-      calendar[date]['purpose'] = purpose
 
-      save_calendar()
+  service = get_calendar_service()
+  start_datetime= datetime.strptime(
+      f"{date} {time}",
+      "%Y-%m-%d %H:%M"
+  )
+  end_datetime= start_datetime + timedelta(hours=1)
 
-      return{'status' : 'success',
+  event ={
+      'summary':purpose,
+      'description': f"Cuustomer: {customer_name} \n Phone_number: {phone_number}"
+  ,
+  'start' :{
+  'dateTime':start_datetime.isoformat(),
+  'timeZone':'Africa/Lagos'},
+  
+  'end':{
+  'dateTime': end_datetime.isoformat(),
+  'timeZone':'Africa/Lagos'}
+  }
+
+  created_event= service.events().insert(
+      calendarId='primary',
+      body=event  
+  ).execute()
+
+  return{'status' : 'success',
              'customer_name': customer_name,
-             'time': time,
-             'message' : f"Your appointment for {'purpose'} has been booked successfully for {date}."}
-
-    else:
-      return {'status' : 'error',
-              'message' : 'please pick another date,the date you picked is not available'}
-
-  return{'status': 'error',
-       'message' : 'date not found'}
+             'message' : f"Your appointment for {purpose} has been booked successfully for {date}."}
+  
 
 
 
@@ -163,27 +174,53 @@ def cancel_appointment(customer_name: str,date: str):
 
 
 
+
 @tool
 def view_appointments(date : str):
+
   """
 View all appointments scheduled for a given date.
 Returns the customer's appointment details if the date is booked.
 """
-  if date in calendar:
-    if calendar[date]['status'] == 'booked':
-      return {
-          'status' : 'success',
-          'messages': calendar[date]
-      }
-      save_calendar()
-    return{
+
+  service = get_calendar_service()
+
+  start_datetime= datetime.strptime(date, '%Y-%m-%d')
+  end_datetime= start_datetime + timedelta(days=1)
+
+  result=service.events().list(
+  calendarId="primary",
+  timeMin=start_datetime.isoformat() + "Z",
+  timeMax=end_datetime.isoformat() + "Z",
+  singleEvents=True,
+  orderBy="startTime"
+    ).execute()
+
+  events=result.get('items',[])
+  if not events:
+      return{
         'status' : 'success',
-        'messages' : f'No appointments for {date}'
+        'message' : f'No appointments for {date}'
     }
-  return{
-      "status" : 'error',
-      'message' : 'invalid date'
-  }
+
+  appointments=[]
+  for event in events:
+    appointments.append({
+           "customer_name": event.get("description", "No description"),
+        "purpose": event.get("summary", "No purpose"),
+        "start_time": event["start"].get("dateTime"),
+        "end_time": event["end"].get("dateTime"),
+          
+      }
+          
+      )
+
+  
+  return {
+          'status' : 'success',
+          'appointments': appointments
+      }
+
 
 @tool
 def reschedule_appointment(old_date: str,new_date : str,customer_name: str):
