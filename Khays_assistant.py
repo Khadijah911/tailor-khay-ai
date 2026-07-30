@@ -87,17 +87,51 @@ def collect_customer_message(state):
 
 from langchain_core.tools import tool
 
+from zoneinfo import ZoneInfo
+
+LAGOS = ZoneInfo("Africa/Lagos")
+
+def make_datetime(date, time):
+    return datetime.strptime(
+        f"{date} {time}",
+        "%Y-%m-%d %H:%M"
+    ).replace(tzinfo=LAGOS)
+
 
 @tool
-def check_calendar(date : str):
+def check_calendar(date : str,time : str ):
   """
-  Use this tool ONLY when the customer wants to know whether a date is available.
-  Do NOT use this tool to make a booking.
-  """
-  if date in calendar:
-    return { 'status' : calendar[date]}
-  else:
-    return{'status' : 'not available'}
+ 
+Use this tool ONLY when the customer wants to check whether a specific appointment slot is available.
+
+Before calling this tool, make sure BOTH the appointment date and appointment time have been provided.
+
+Do NOT use this tool to make a booking.
+"""
+ 
+
+  service = get_calendar_service()
+  start_datetime = make_datetime(date, time)
+  end_datetime = start_datetime + timedelta(hours=1)
+  print(start_datetime.isoformat())
+  print(end_datetime.isoformat())
+  print(start_datetime.tzinfo)
+  print(end_datetime.tzinfo)
+
+  result=service.events().list(
+    calendarId="primary",
+    timeMin=start_datetime.isoformat(),
+    timeMax=end_datetime.isoformat(),
+    singleEvents=True,
+    orderBy="startTime"
+    ).execute()
+
+  events=result.get('items',[])
+  if not events:
+    return{"status": "available"}
+        
+  return {"status": "booked"}
+
 
 
 @tool
@@ -110,16 +144,33 @@ def book_appointment(date : str,time : str,customer_name : str ,phone_number : s
   """
 
   service = get_calendar_service()
-  start_datetime= datetime.strptime(
-      f"{date} {time}",
-      "%Y-%m-%d %H:%M"
-  )
-  end_datetime= start_datetime + timedelta(hours=1)
+  start_datetime = make_datetime(date, time)
+  end_datetime = start_datetime + timedelta(hours=1)
+  result=service.events().list(
+    calendarId="primary",
+    timeMin=start_datetime.isoformat(),
+    timeMax=end_datetime.isoformat(),
+    singleEvents=True,
+    orderBy="startTime"
+    ).execute()
+
+  events=result.get('items',[])
+  if events:
+    return{
+      'status':'error',
+      'message':'The selected date and time are already booked. Please choose another time'
+    }
 
   event ={
       'summary':purpose,
-      'description': f"Cuustomer: {customer_name} \n Phone_number: {phone_number}"
-  ,
+    "description": f"Appointment for {customer_name}",
+  "extendedProperties": {
+        "private": {
+            "customer_name": customer_name,
+            "phone_number": phone_number,
+            'purpose' : purpose
+        }
+    },
   'start' :{
   'dateTime':start_datetime.isoformat(),
   'timeZone':'Africa/Lagos'},
@@ -142,36 +193,47 @@ def book_appointment(date : str,time : str,customer_name : str ,phone_number : s
 
 
 @tool
-def cancel_appointment(customer_name: str,date: str):
-  """cancel an appointment booked by the customer and make the date available for booking"""
+def cancel_appointment(phone_number: str,customer_name: str):
+  """
+Cancel an appointment booked by the customer and make the date available for booking
+Use this tool ONLY when the customer wants to cancel an existing appointment.
+
+The tool searches for the customer's appointment and removes it from the calendar.
+"""
 
   print("cancel_appointment tool called")
 
+  
+  service = get_calendar_service()
 
-  if date in calendar:
-    if calendar[date]['customer_name'].lower() == customer_name.lower() and calendar[date]['status']=='booked':
-      calendar[date]['status'] = "available"
-      calendar[date]['customer_name'] = None
-      calendar[date]['phone_number'] = None
-      calendar[date]['time'] = None
-      calendar[date]['purpose'] = None
+  result=service.events().list(
+  calendarId="primary",
+  singleEvents=True,
+    ).execute()
+  events=result.get('items',[])
 
-      save_calendar()
+  for event in events:
 
-      return{
-          'status' : 'cancelled',
-          'message' : f'The booking for {date} has been sucessfully cancelled'
-      }
+    private = event.get(
+        "extendedProperties",
+        {}
+    ).get(
+        "private",
+        {}
+    )
 
-    else:
-      return{'status' : 'error',
-             'message' : 'You do not have a booking '}
-  else:
-    return{
-      'status': 'error',
-      'message' : 'invalid date,please put in correct date'
+    if private.get("phone_number") == phone_number:
+        service.events().delete(calendarId="primary",
+         eventId=event["id"] ).execute()
+
+        return {
+        "status": "success",
+        "message": "Your appointment has been cancelled successfully."
+        }
+  return {
+    "status": "error",
+    "message": "I couldn't find any appointment with that phone number."
     }
-
 
 
 
@@ -210,65 +272,112 @@ Returns the customer's appointment details if the date is booked.
         "purpose": event.get("summary", "No purpose"),
         "start_time": event["start"].get("dateTime"),
         "end_time": event["end"].get("dateTime"),
-          
-      }
-          
-      )
-
-  
+          }
+          )
   return {
           'status' : 'success',
           'appointments': appointments
       }
 
-
 @tool
-def reschedule_appointment(old_date: str,new_date : str,customer_name: str):
-  """move an appointment from an old date to a new date
+def reschedule_appointment(
+    phone_number: str,
+    new_date: str,
+    new_time: str,
+    customer_name: str
+):
+    """move an appointment from an old date to a new date
 the customer's details, appointment time, and purpose.
 """
-  if old_date in calendar and new_date in calendar:
-    if calendar[old_date]['status'] != 'booked':
-      return  {'status': 'error',
-             'message' : 'There is no appointment for this date.'}
 
-    if calendar[old_date]['customer_name'].lower() != customer_name.lower():
-      return  {'status': 'error',
-             'message' : 'The appointment does not belong to this customer.'}
+    service = get_calendar_service()
 
-    if calendar[new_date]['status'] != 'available':
-      return{'status': 'error',
-             'message' : 'The new date is already booked.'
+    result = service.events().list(
+        calendarId="primary",
+        singleEvents=True,
+    ).execute()
 
-      }
-    appointment=calendar[old_date].copy()
-    calendar[old_date]['status'] = "available"
-    calendar[old_date]['customer_name'] = None
-    calendar[old_date]['phone_number'] = None
-    calendar[old_date]['time'] = None
-    calendar[old_date]['purpose'] = None
-    calendar[new_date]['status'] = "booked"
-    calendar[new_date]['customer_name'] = appointment['customer_name']
-    calendar[new_date]['phone_number'] = appointment['phone_number']
-    calendar[new_date]['time'] = appointment['time']
-    calendar[new_date]['purpose'] = appointment['purpose']
+    events = result.get("items", [])
 
-    save_calendar()
+    
+    appointment = None
 
-    return{'status': 'success',
-              'message' : f' {new_date} has been sucessfully booked,rescheduling is sucessful'}
+    for event in events:
+        private = event.get(
+            "extendedProperties",
+            {}
+        ).get(
+            "private",
+            {}
+        )
 
+        if private.get("phone_number") == phone_number:
+            appointment = event
+            break
 
-  return{ "status" : 'error',
-      'message' : 'invalid date'
+ 
+    if appointment is None:
+        return {
+            "status": "error",
+            "message": "Appointment not found."
+        }
 
+    
+    new_start = datetime.strptime(
+        f"{new_date} {new_time}",
+        "%Y-%m-%d %H:%M"
+    ).replace(tzinfo=ZoneInfo("Africa/Lagos"))
+
+    new_end = new_start + timedelta(hours=1)
+
+    
+    result = service.events().list(
+        calendarId="primary",
+        timeMin=new_start.isoformat(),
+        timeMax=new_end.isoformat(),
+        singleEvents=True,
+        orderBy="startTime"
+    ).execute()
+
+    events_in_slot = result.get("items", [])
+
+    for event in events_in_slot:
+        if event["id"] != appointment["id"]:
+            return {
+                "status": "error",
+                "message": "The new date and time is already booked."
+            }
+    appointment["start"] = {
+    "dateTime": new_start.isoformat(),
+    "timeZone": "Africa/Lagos"
   }
-  
+
+    appointment["end"] = {
+      "dateTime": new_end.isoformat(),
+      "timeZone": "Africa/Lagos"
+  }  
+
+    updated_event = service.events().update(
+      calendarId="primary",
+      eventId=appointment["id"],
+      body=appointment
+  ).execute()
+
+    return {
+      "status": "success",
+      "customer_name": customer_name,
+      "message": (
+          f"Your appointment has been rescheduled to "
+          f"{new_date} at {new_time}."
+      )
+  }
 
 @tool
 def update_appointment(date:str,customer_name: str,new_phone_number :str = None, new_purpose :str = None, new_appontment_time :str = None):
 
-  """ help update client appointment details with the new information provided"""
+  """ help update client appointment details with the new information provided
+  The tool finds the customer's existing appointment and updates it to the new date and time.
+  """
   if date in calendar:
     if calendar[date]['status'] != 'booked':
       return  {'status': 'error',
