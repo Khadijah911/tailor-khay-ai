@@ -113,10 +113,20 @@ Do NOT use this tool to make a booking.
   service = get_calendar_service()
   start_datetime = make_datetime(date, time)
   end_datetime = start_datetime + timedelta(hours=1)
-  print(start_datetime.isoformat())
-  print(end_datetime.isoformat())
-  print(start_datetime.tzinfo)
-  print(end_datetime.tzinfo)
+  
+  # Check working days (Monday=0 ... Sunday=6)
+  if start_datetime.weekday() == 6:
+      return {
+          "status": "error",
+          "message": "Appointments are available only from Monday to Saturday."
+      }
+
+  # Check business hours (9:00 AM - 5:00 PM)
+  if not (9 <= start_datetime.hour < 17):
+      return {
+          "status": "error",
+          "message": "Appointments can only be booked between 9:00 AM and 5:00 PM."
+      }
 
   result=service.events().list(
     calendarId="primary",
@@ -146,6 +156,20 @@ def book_appointment(date : str,time : str,customer_name : str ,phone_number : s
   service = get_calendar_service()
   start_datetime = make_datetime(date, time)
   end_datetime = start_datetime + timedelta(hours=1)
+
+
+  if start_datetime.weekday() == 6:
+      return {
+          "status": "error",
+          "message": "Appointments are available only from Monday to Saturday."
+      }
+
+
+  if not (9 <= start_datetime.hour < 17):
+      return {
+          "status": "error",
+          "message": "Appointments can only be booked between 9:00 AM and 5:00 PM."
+      }
   result=service.events().list(
     calendarId="primary",
     timeMin=start_datetime.isoformat(),
@@ -292,6 +316,18 @@ the customer's details, appointment time, and purpose.
 
     service = get_calendar_service()
 
+    if start_datetime.weekday() == 6:
+        return {
+            "status": "error",
+            "message": "Appointments are available only from Monday to Saturday."
+        }
+
+    if not (9 <= start_datetime.hour < 17):
+        return {
+            "status": "error",
+            "message": "Appointments can only be booked between 9:00 AM and 5:00 PM."
+        }
+
     result = service.events().list(
         calendarId="primary",
         singleEvents=True,
@@ -372,70 +408,104 @@ the customer's details, appointment time, and purpose.
       )
   }
 
+
 @tool
-def update_appointment(date:str,customer_name: str,new_phone_number :str = None, new_purpose :str = None, new_appontment_time :str = None):
+def update_appointment(customer_name : str, phone_number : str,new_customer_name : str="",new_phone_number : str="", new_purpose : str=""):
 
-  """ help update client appointment details with the new information provided
-  The tool finds the customer's existing appointment and updates it to the new date and time.
-  """
-  if date in calendar:
-    if calendar[date]['status'] != 'booked':
-      return  {'status': 'error',
-             'message' : 'There is no appointment for this date.'}
 
-    if calendar[date]['customer_name'].lower() != customer_name.lower():
-      return  {'status': 'error',
-             'message' : 'The appointment does not belong to this customer.'}
+  """ help update client appointment details with the new information provided"""
+  service = get_calendar_service()
+  result=service.events().list(
+  calendarId="primary",
+  singleEvents=True ).execute()
+  events=result.get('items',[])
 
-  
-    if new_phone_number is None and new_appointment_time is None and new_purpose is None :
+  for event in events:
+
+    private = event.get(
+        "extendedProperties",
+        {}
+    ).get(
+        "private",
+        {}
+    )
+    if ( private.get("phone_number") == phone_number and private.get("customer_name") == customer_name):
+      updated = False
+      if new_phone_number:
+        private["phone_number"]= new_phone_number
+        updated = True
+      if new_customer_name:
+        private['customer_name'] = new_customer_name
+        event['description'] = f"Appointment for {new_customer_name}"
+        updated = True
+      if new_purpose:
+        private['purpose'] = new_purpose
+        event["summary"] = new_purpose
+        updated = True
+      if not updated:
+        return {
+            "status": "error",
+            "message": "No new information was provided to update."
+        }
+      service.events().update(calendarId="primary",
+         eventId=event["id"],body=event ).execute()
+
       return {
-    "status": "error",
-    "message": "No new information was provided to update."
+    "status": "success",
+    "customer_name": private["customer_name"],
+    "message": "Your appointment details have been updated successfully."
 }
-  
-    if new_phone_number:
-      calendar[date]['phone_number'] = new_phone_number
-    if new_appointment_time:
-      calendar[date]['time'] = new_appointment_time
-    if new_purpose:
-      calendar[date]['purpose'] = new_purpose
-    save_calendar()
-    
-    
-    return{'status': 'success',
-              'message' : f' Your appointment has been sucessfuly updated'}
-
-
-  return{ "status" : 'error',
-      'message' : 'invalid date'
-
-  }
+  return {
+    "status": "error",
+    "message": "I couldn't find any appointment with the provided name and phone number."
+    }
 
 @tool
 def show_all_appointments():
-  """Return all booked appointments and their details for Tailor Khay."""
-  appointments=[]
-  for date in calendar:
-    if calendar[date]['status'] =='booked':
-      appointments.append({'date' : date,
-                             'status' : calendar[date]['status'],
-                             'customer_name': calendar[date]['customer_name'],
-                               'phone_number': calendar[date]['phone_number'],
-                                  'time': calendar[date]['time'],
-                                     'purpose': calendar[date]['purpose']})
+    """
+    Return all booked appointments and their details for Tailor Khay.
+    """
 
+    service = get_calendar_service()
 
+    result = service.events().list(
+        calendarId="primary",
+        singleEvents=True,
+        orderBy="startTime"
+    ).execute()
 
-  if not appointments:
+    events = result.get("items", [])
+
+    if not events:
         return {
-              "status": "error",
-              "message": "There are no booked appointments."
-          }
-  return{
-            'status' : 'success',
-            'appointments': appointments
+            "status": "error",
+            "message": "There are no booked appointments."
         }
+
+    appointments = []
+
+    for event in events:
+
+        private = event.get(
+            "extendedProperties",
+            {}
+        ).get(
+            "private",
+            {}
+        )
+
+        appointments.append({
+            "customer_name": private.get("customer_name"),
+            "phone_number": private.get("phone_number"),
+            "purpose": event.get("summary"),
+            "start_time": event["start"].get("dateTime"),
+            "end_time": event["end"].get("dateTime")
+        })
+
+    return {
+        "status": "success",
+        "appointments": appointments
+    }
 
 @tool
 def save_customer_measurements(
@@ -1202,6 +1272,10 @@ Appointments:
 Tailor Khay may view all appointments.
 Customers may only view their own appointments.
 
+Tailor Khay accepts appointments Monday through Saturday only, between 9:00 AM and 5:00 PM (Africa/Lagos time).
+ Do not attempt to book, reschedule, or check availability outside these business hours. 
+ Instead, politely ask the customer to choose another date or time.
+
 Measurements:
 Tailor Khay may view and update any customer's measurements.
 Customers may only view or update their own measurements.
@@ -1248,6 +1322,8 @@ When using this tool, convert the requested period into a start date and an end 
 Never guess whether orders exist.
 
 Always use the appropriate tool to retrieve order information before answering questions about orders.
+
+
 
 
       '''),
