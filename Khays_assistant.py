@@ -39,7 +39,15 @@ class GraphState(TypedDict):
 
 memory=MemorySaver()
 
-
+BUSINESS_INFO = {
+    "name": "Tailor Khay",
+    "address": "Block D, Phase 2, NITEL Estate, Satellite Town, Lagos",
+    "working_hours": "Monday-Saturday, 9:00 AM - 5:00 PM",
+    "phone": "+234 906 345 6960",
+    "whatsapp": "+234 807 314 3931",
+    "email": "sakakhadijah91@gmail.com",
+    "services" : ['Asoebi','Wedding gowns','Custom dresses','Ready to wear','Measurements','male shirts']
+}
 
 def save_calendar():
   with open('calendar.json','w') as file:
@@ -127,6 +135,12 @@ Do NOT use this tool to make a booking.
           "status": "error",
           "message": "Appointments can only be booked between 9:00 AM and 5:00 PM."
       }
+  
+  if start_datetime < datetime.now(ZoneInfo("Africa/Lagos")):
+    return {
+        "status": "error",
+        "message": "Appointments can only be booked for a future date and time."
+    }
 
   result=service.events().list(
     calendarId="primary",
@@ -170,6 +184,12 @@ def book_appointment(date : str,time : str,customer_name : str ,phone_number : s
           "status": "error",
           "message": "Appointments can only be booked between 9:00 AM and 5:00 PM."
       }
+
+  if start_datetime < datetime.now(ZoneInfo("Africa/Lagos")):
+    return {
+        "status": "error",
+        "message": "Appointments can only be booked for a future date and time."
+    }
   result=service.events().list(
     calendarId="primary",
     timeMin=start_datetime.isoformat(),
@@ -326,6 +346,12 @@ the customer's details, appointment time, and purpose.
         return {
             "status": "error",
             "message": "Appointments can only be booked between 9:00 AM and 5:00 PM."
+        }
+    
+    if start_datetime < datetime.now(ZoneInfo("Africa/Lagos")):
+        return {
+            "status": "error",
+            "message": "Appointments can only be booked for a future date and time."
         }
 
     result = service.events().list(
@@ -1206,6 +1232,9 @@ def khay_assistant(state):
   prompt = ChatPromptTemplate.from_messages([
       ('system' , f'''
       You are Tailor Khay's AI assistant.
+
+      Business Information:
+{BUSINESS_INFO}
 
 Today's date is {today}.
 
