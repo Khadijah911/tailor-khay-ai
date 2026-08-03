@@ -49,6 +49,9 @@ BUSINESS_INFO = {
     "services" : ['Asoebi','Wedding gowns','Custom dresses','Ready to wear','Measurements','male shirts']
 }
 
+business_info = json.dumps(BUSINESS_INFO, indent=2)
+business_info = business_info.replace("{", "{{").replace("}", "}}")
+
 def save_calendar():
   with open('calendar.json','w') as file:
     json.dump(calendar,file,indent=4)
@@ -532,6 +535,67 @@ def show_all_appointments():
         "status": "success",
         "appointments": appointments
     }
+
+@tool
+def show_available_time_slots(date:str):
+  """
+Use this tool when a customer asks:
+ What times are available on a particular date?
+Show available appointment slots.
+What appointment times are free?
+Which times can I book on a given date?
+The tool returns every available one-hour appointment slot between
+9:00 AM and 5:00 PM for the requested date.
+"""
+  service=get_calendar_service()
+
+  start_datetime = datetime.strptime(
+    f"{date}",
+    "%Y-%m-%d"
+).replace(tzinfo=ZoneInfo("Africa/Lagos")
+)
+  end_datetime = start_datetime + timedelta(days=1)
+
+  result=service.events().list(
+    calendarId="primary",
+    timeMin=start_datetime.isoformat(),
+    timeMax=end_datetime.isoformat() ,
+    singleEvents=True,
+    orderBy="startTime"
+    ).execute()
+
+  events=result.get('items',[])
+
+  business_slots=[]
+  for i in range (9,17):
+      slot_start = datetime.strptime(
+        f"{date} {i}:00",
+        "%Y-%m-%d %H:%M"
+      ).replace(tzinfo=ZoneInfo("Africa/Lagos"))
+
+      booked=False
+
+      for event in events:
+
+        event_start=event['start']['dateTime']
+
+        event_start=datetime.fromisoformat(event_start)
+        if event_start == slot_start:
+          booked=True
+          break
+
+      if not booked:
+          business_slots.append(slot_start.strftime("%I:%M %p"))
+  if business_slots:
+    return{ "status" : "success",
+    "date" : date,
+    "available_slots": business_slots
+    }
+  return{ "status": "full",
+        "message": "There are no available appointment slots for this date."
+        }
+
+
 
 @tool
 def save_customer_measurements(
@@ -1216,10 +1280,10 @@ Args:
 model_with_tools = model.bind_tools([check_calendar,book_appointment,cancel_appointment,reschedule_appointment,view_appointments,update_appointment,
 show_all_appointments,save_customer_measurements,update_measurements,view_measurements,create_order,view_order,update_order,view_orders_by_status,
 view_orders_by_delivery_date,view_payment_history,update_order_status,get_customers_profile,get_business_summary,get_customers_with_outstanding_balance,
-get_orders_by_date_range])
+get_orders_by_date_range,show_available_time_slots])
 tool_node=ToolNode([check_calendar,book_appointment,cancel_appointment,reschedule_appointment,view_appointments,update_appointment,show_all_appointments,
 save_customer_measurements,update_measurements,view_measurements,create_order,view_order,update_order,view_orders_by_status,view_orders_by_delivery_date,
-view_payment_history,update_order_status,get_customers_profile,get_business_summary,get_customers_with_outstanding_balance,get_orders_by_date_range
+view_payment_history,update_order_status,get_customers_profile,get_business_summary,get_customers_with_outstanding_balance,get_orders_by_date_range,show_available_time_slots
 ])
 
 from datetime import date
@@ -1227,14 +1291,13 @@ from datetime import date
 today = date.today().isoformat()
 
 def khay_assistant(state):
-  print(">>> khay_assistant")
 
   prompt = ChatPromptTemplate.from_messages([
       ('system' , f'''
       You are Tailor Khay's AI assistant.
 
       Business Information:
-{BUSINESS_INFO}
+{business_info}
 
 Today's date is {today}.
 
