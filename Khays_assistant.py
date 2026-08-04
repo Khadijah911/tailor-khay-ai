@@ -1,4 +1,4 @@
-from inspect import EndOfBlock
+
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -21,6 +21,8 @@ import json
 import sqlite3
 from datetime import datetime, timedelta
 from calendar_auth import get_calendar_service
+
+from rag import answer_business_question
 
 api_key = os.getenv("OPENAI_API_KEY")
 model = ChatOpenAI(
@@ -1271,6 +1273,27 @@ Args:
 }
 
 
+from langchain_core.tools import tool
+
+@tool
+def business_knowledge(question: str):
+    """
+    Answer questions about Tailor Khay's business using the knowledge base.
+
+    Use this tool for questions about:
+    pricing
+    services
+    tailoring policies
+    FAQs
+    rush orders
+    bridal services
+    alteration policies
+    deposits
+    delivery timelines"""
+
+    return answer_business_question(question)
+
+
 
 
      
@@ -1280,11 +1303,11 @@ Args:
 model_with_tools = model.bind_tools([check_calendar,book_appointment,cancel_appointment,reschedule_appointment,view_appointments,update_appointment,
 show_all_appointments,save_customer_measurements,update_measurements,view_measurements,create_order,view_order,update_order,view_orders_by_status,
 view_orders_by_delivery_date,view_payment_history,update_order_status,get_customers_profile,get_business_summary,get_customers_with_outstanding_balance,
-get_orders_by_date_range,show_available_time_slots])
+get_orders_by_date_range,show_available_time_slots,business_knowledge])
 tool_node=ToolNode([check_calendar,book_appointment,cancel_appointment,reschedule_appointment,view_appointments,update_appointment,show_all_appointments,
 save_customer_measurements,update_measurements,view_measurements,create_order,view_order,update_order,view_orders_by_status,view_orders_by_delivery_date,
-view_payment_history,update_order_status,get_customers_profile,get_business_summary,get_customers_with_outstanding_balance,get_orders_by_date_range,show_available_time_slots
-])
+view_payment_history,update_order_status,get_customers_profile,get_business_summary,get_customers_with_outstanding_balance,get_orders_by_date_range,
+show_available_time_slots,business_knowledge])
 
 from datetime import date
 
@@ -1330,7 +1353,6 @@ Cancelling appointments.
 Collecting any information needed to complete a booking.
 Handling the entire conversation whenever possible.
 If the customer wants to book an appointment, collect all the required information before calling the booking tool.
-.
 
 The required information is:
 appointment date
@@ -1416,6 +1438,12 @@ Never guess whether orders exist.
 Always use the appropriate tool to retrieve order information before answering questions about orders.
 
 
+For questions about Tailor Khay's pricing, services, policies, FAQs,
+bridal services, alterations, rush orders, and other business information,
+ALWAYS use the business_knowledge tool before answering.
+
+Do not answer these questions from memory
+
 
 
       '''),
@@ -1450,19 +1478,26 @@ def intent_router(state):
       }
 
 
-def pricing (state):
-  message='we will handover to tailor_khay to come give you the price'
-  print(message)
+def pricing(state):
 
-  return{
-      'ai_message' : message,
-      'messages' : [AIMessage(content = message)]
-  }
+    question = state["human_message"]
+
+    message = answer_business_question(question)
+
+    if "don't know" in message.lower():
+        message = (
+            "This requires a custom quotation. "
+            "I'll hand this over to Tailor Khay, who will provide the final price."
+        )
+    print(message)
+
+    return {
+        "ai_message": message,
+        "messages": [AIMessage(content=message)]
+    }
 
 graph=StateGraph(GraphState)
 graph.add_node('khay_assistant', khay_assistant)
-
-
 graph.add_node('pricing',pricing)
 graph.add_node('intent_router',intent_router)
 graph.add_node('tools',tool_node)
