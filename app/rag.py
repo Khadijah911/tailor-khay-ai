@@ -18,7 +18,13 @@ vectorstore = Chroma(
     embedding_function=emb
 )
 
-retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
+retriever = vectorstore.as_retriever(
+    search_type="mmr",
+    search_kwargs={
+        "k": 5,
+        "fetch_k": 10
+    }
+)
 llm = ChatOpenAI(
     model="gpt-4o",
     temperature=0,

@@ -13,16 +13,17 @@ from langgraph.graph.message import add_messages
 from langchain_core.prompts import MessagesPlaceholder
 from langgraph.checkpoint.memory import MemorySaver
 from langchain_openai import ChatOpenAI
-
 from langchain_openai import ChatOpenAI
 from langgraph.prebuilt import ToolNode,tools_condition
 import os
 import json
 import sqlite3
 from datetime import datetime, timedelta
-from calendar_auth import get_calendar_service
+from google_calendar.calendar_auth import get_calendar_service
 
-from rag import answer_business_question
+from app.rag import answer_business_question
+from langgraph.store.memory import InMemoryStore
+from langgraph.runtime import Runtime
 
 api_key = os.getenv("OPENAI_API_KEY")
 model = ChatOpenAI(
@@ -38,21 +39,10 @@ class GraphState(TypedDict):
   should_continue : str
   next_action : str
   messages : Annotated[list,add_messages]
+  phone_number : str
 
 memory=MemorySaver()
-
-BUSINESS_INFO = {
-    "name": "Tailor Khay",
-    "address": "Block D, Phase 2, NITEL Estate, Satellite Town, Lagos",
-    "working_hours": "Monday-Saturday, 9:00 AM - 5:00 PM",
-    "phone": "+234 906 345 6960",
-    "whatsapp": "+234 807 314 3931",
-    "email": "sakakhadijah91@gmail.com",
-    "services" : ['Asoebi','Wedding gowns','Custom dresses','Ready to wear','Measurements','male shirts']
-}
-
-business_info = json.dumps(BUSINESS_INFO, indent=2)
-business_info = business_info.replace("{", "{{").replace("}", "}}")
+store=InMemoryStore()
 
 def save_calendar():
   with open('calendar.json','w') as file:
@@ -1292,14 +1282,6 @@ def business_knowledge(question: str):
     delivery timelines"""
 
     return answer_business_question(question)
-
-
-
-
-     
-
-
-
 model_with_tools = model.bind_tools([check_calendar,book_appointment,cancel_appointment,reschedule_appointment,view_appointments,update_appointment,
 show_all_appointments,save_customer_measurements,update_measurements,view_measurements,create_order,view_order,update_order,view_orders_by_status,
 view_orders_by_delivery_date,view_payment_history,update_order_status,get_customers_profile,get_business_summary,get_customers_with_outstanding_balance,
@@ -1313,25 +1295,49 @@ from datetime import date
 
 today = date.today().isoformat()
 
-def khay_assistant(state):
+def khay_assistant(state,runtime:Runtime):
+  phone = state.get("phone_number")
+  user_message = state["human_message"]
+  memory_context = ""
 
+  if phone:
+      print(f"Phone: {phone}")
+      memories = runtime.store.search(("customers", phone))
+
+      print(f"Found {len(memories)} memories")
+
+      for memory in memories:
+          print(memory.value)
+
+      if memories:
+          memory_context = "\n".join(
+              memory.value["content"]
+              for memory in memories
+          )
+
+  print("Memory Context:")
+  print(memory_context)
   prompt = ChatPromptTemplate.from_messages([
       ('system' , f'''
       You are Tailor Khay's AI assistant.
 
-      Business Information:
-{business_info}
+These are facts remembered from previous conversations.Use them naturally whenever they are relevant.
+Customer Memory:
+{memory_context}
+
+Current Customer Request:
+{user_message}
 
 Today's date is {today}.
 
 When the user refers to:
-- today
-- tomorrow
-- yesterday
-- this week
-- next week
-- this month
-- next month
+today
+tomorrow
+yesterday
+this week
+next week
+this month
+next month
 
 Always interpret these relative to today's date ({today}).
 
@@ -1457,12 +1463,69 @@ Do not answer these questions from memory
      )
 
   response =model_with_tools.invoke(message)
+  memory = extract_memory(
+    user_message=user_message,
+    ai_message=response.content
+  )
+  if memory.get("remember") and phone:
+    runtime.store.put(
+        ("customers", phone),
+        key=str(uuid.uuid4()),
+        value={
+            "type": memory["type"],
+            "content": memory["content"]
+        }
+    )
+
+    print("Memory saved:", memory)
   print(response.content)
   return {
       'ai_message' : response.content,
       'messages' : [ response]
 
   }
+
+
+import uuid
+def extract_memory(ai_message : str, user_message : str):
+  memory_prompt = f"""
+You are an information extraction system.
+Read the conversation below.
+If there is something worth remembering about this customer for future conversations,
+return JSON.
+
+Only remember things like:
+preferences, complaints, favourite styles, communication preferences, important notes, measurements preference, delivery preference
+
+You do nOT remember greetings, small talk, or temporary requests.
+Conversation
+
+Customer:
+{user_message}
+
+Assistant:
+{ai_message}
+
+Return ONLY valid JSON.
+
+If nothing should be remembered return:
+
+{{"remember": false}}
+
+Otherwise return
+
+{{
+    "remember": true,
+    "type": "...",
+    "content": "..."
+}}
+"""
+  response=model.invoke(memory_prompt)
+  return json.loads(response.content)
+
+  
+
+  return json.loads(response.content)
 
 def intent_router(state):
 
@@ -1513,7 +1576,8 @@ graph.add_edge('tools','khay_assistant')
 graph.add_edge('khay_assistant',END)
 graph.add_edge('pricing' , END)
 
-app=graph.compile(checkpointer=memory)
+app=graph.compile(checkpointer=memory,
+store=store)
 
 while True:
 
@@ -1526,13 +1590,16 @@ while True:
     break
 
   app.invoke({ 'human_message' : user_inquiry,
+  'phone_number' : '08073143931',
   'messages' : [HumanMessage(content=user_inquiry)]
   },
             config = {
                 'configurable' : {
-                    'thread_id' : 'customer_001'
+                    'thread_id' : '08073143931'
                 }
             })
+
+
 
 
 
