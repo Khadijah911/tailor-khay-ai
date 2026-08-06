@@ -20,17 +20,13 @@ import json
 import sqlite3
 from datetime import datetime, timedelta
 from google_calendar.calendar_auth import get_calendar_service
-
-from app.rag import answer_business_question
-from langgraph.store.memory import InMemoryStore
-from langgraph.runtime import Runtime
+from database.memory import save_memory, load_memories
 
 api_key = os.getenv("OPENAI_API_KEY")
 model = ChatOpenAI(
     model="gpt-4o-mini",
     api_key=api_key
 )
-
 
 class GraphState(TypedDict):
   ai_message : str
@@ -42,19 +38,15 @@ class GraphState(TypedDict):
   phone_number : str
 
 memory=MemorySaver()
-store=InMemoryStore()
-
 def save_calendar():
   with open('calendar.json','w') as file:
     json.dump(calendar,file,indent=4)
-
 
 def load_calendar():
   with open('calendar.json','r') as file:
     return json.load(file)
 
 calendar =load_calendar()
-
 
 def load_measurement():
   with open ('measurement.json','r') as file:
@@ -1295,25 +1287,26 @@ from datetime import date
 
 today = date.today().isoformat()
 
-def khay_assistant(state,runtime:Runtime):
+def khay_assistant(state):
   phone = state.get("phone_number")
   user_message = state["human_message"]
   memory_context = ""
 
   if phone:
       print(f"Phone: {phone}")
-      memories = runtime.store.search(("customers", phone))
+      memories = load_memories(phone)
 
       print(f"Found {len(memories)} memories")
 
-      for memory in memories:
-          print(memory.value)
+      for (content,) in memories:
+        print(content)
+        
 
-      if memories:
-          memory_context = "\n".join(
-              memory.value["content"]
-              for memory in memories
-          )
+      memory_context = "\n".join(
+        content
+        for (content,) in memories
+  )
+        
 
   print("Memory Context:")
   print(memory_context)
@@ -1466,21 +1459,22 @@ Do not answer these questions from memory
   memory = extract_memory(
     user_message=user_message,
     ai_message=response.content
-  )
+)
+
   if memory.get("remember") and phone:
-    runtime.store.put(
-        ("customers", phone),
-        key=str(uuid.uuid4()),
-        value={
-            "type": memory["type"],
-            "content": memory["content"]
-        }
+    saved = save_memory(
+        phone=phone,
+        content = memory["content"].strip().lower()
     )
 
-    print("Memory saved:", memory)
-  print(response.content)
-  return {
-      'ai_message' : response.content,
+    if saved:
+        print("Memory saved:", memory)
+    else:
+        print("Memory already exists.")
+
+  print(memory)
+  
+  return {'ai_message' : response.content,
       'messages' : [ response]
 
   }
@@ -1493,9 +1487,18 @@ You are an information extraction system.
 Read the conversation below.
 If there is something worth remembering about this customer for future conversations,
 return JSON.
+Allowed memory types:
+preference
+complaint
+favourite_style
+favourite_fabric
+favourite_colour
+communication_preference
+delivery_preference
+important_note
 
-Only remember things like:
-preferences, complaints, favourite styles, communication preferences, important notes, measurements preference, delivery preference
+Choose ONLY one of these.
+Do not invent new memory types.
 
 You do nOT remember greetings, small talk, or temporary requests.
 Conversation
@@ -1512,12 +1515,45 @@ If nothing should be remembered return:
 
 {{"remember": false}}
 
-Otherwise return
+If something should be remembered, return JSON.
+
+The "type" MUST be exactly one of these:
+
+- preference
+- complaint
+- favourite_style
+- favourite_fabric
+- favourite_colour
+- communication_preference
+- important_note
+
+Do NOT invent new types.
+Do NOT pluralize them.
+
+The "content" should be short, factual, and normalized.
+
+Examples:
+
+Customer:
+"I'd prefer afternoon appointments."
+
+Return:
 
 {{
     "remember": true,
-    "type": "...",
-    "content": "..."
+    "type": "preference",
+    "content": "Prefers afternoon appointments."
+}}
+
+Customer:
+"I love floor-length trousers."
+
+Return:
+
+{{
+    "remember": true,
+    "type": "preference",
+    "content": "Prefers floor-length trousers."
 }}
 """
   response=model.invoke(memory_prompt)
@@ -1576,30 +1612,29 @@ graph.add_edge('tools','khay_assistant')
 graph.add_edge('khay_assistant',END)
 graph.add_edge('pricing' , END)
 
-app=graph.compile(checkpointer=memory,
-store=store)
+app=graph.compile(checkpointer=memory)
 
 while True:
 
-  user_inquiry = input('Enter your inquiry: ')
+    user_inquiry = input("Enter your inquiry: ")
 
-  if user_inquiry.lower() == 'bye':
-    print('goodbye')
+    if user_inquiry.lower() == "bye":
+        print("goodbye")
+        break
 
+    result = app.invoke(
+        {
+            "human_message": user_inquiry,
+            "phone_number": "08073143931",
+            "messages": [HumanMessage(content=user_inquiry)],
+        },
+        config={
+            "configurable": {
+                "thread_id": "08073143931"
+            }
+        }
+    )
 
-    break
-
-  app.invoke({ 'human_message' : user_inquiry,
-  'phone_number' : '08073143931',
-  'messages' : [HumanMessage(content=user_inquiry)]
-  },
-            config = {
-                'configurable' : {
-                    'thread_id' : '08073143931'
-                }
-            })
-
-
-
+    print(result["ai_message"])
 
 
