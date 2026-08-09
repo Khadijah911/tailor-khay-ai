@@ -84,3 +84,9 @@ calendar = {
 
 with open("calendar.json", "w") as file:
     json.dump(calendar, file, indent=4)
+
+def make_datetime(date, time):
+    return datetime.strptime(
+        f"{date} {time}",
+        "%Y-%m-%d %H:%M"
+    ).replace(tzinfo=LAGOS)

@@ -22,6 +22,8 @@ from datetime import datetime, timedelta
 from google_calendar.calendar_auth import get_calendar_service
 from database.memory import save_memory, load_memories
 
+DEBUG = True
+
 api_key = os.getenv("OPENAI_API_KEY")
 model = ChatOpenAI(
     model="gpt-4o-mini",
@@ -1293,23 +1295,19 @@ def khay_assistant(state):
   memory_context = ""
 
   if phone:
-      print(f"Phone: {phone}")
+      if DEBUG:
+        print(f"Phone: {phone}")
       memories = load_memories(phone)
 
-      print(f"Found {len(memories)} memories")
-
-      for (content,) in memories:
-        print(content)
-        
-
+      if DEBUG:
+        print(f"Found {len(memories)} memories")
       memory_context = "\n".join(
         content
         for (content,) in memories
   )
         
-
-  print("Memory Context:")
-  print(memory_context)
+if DEBUG:
+    print(f"Loaded {len(memories)} memories")
   prompt = ChatPromptTemplate.from_messages([
       ('system' , f'''
       You are Tailor Khay's AI assistant.
@@ -1466,13 +1464,8 @@ Do not answer these questions from memory
         phone=phone,
         content = memory["content"].strip().lower()
     )
-
-    if saved:
-        print("Memory saved:", memory)
-    else:
-        print("Memory already exists.")
-
-  print(memory)
+  if DEBUG:
+    print(memory)
   
   return {'ai_message' : response.content,
       'messages' : [ response]
