@@ -1,17 +1,19 @@
 import anyio
+import sys
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
 
 server_params = StdioServerParameters(
-    command="python",
+    command=sys.executable,
     args=["-m", "mcp_server.server"],
 )
 
 
 async def main():
     async with stdio_client(server_params) as (read_stream, write_stream):
+
         async with ClientSession(read_stream, write_stream) as session:
 
             await session.initialize()
@@ -23,11 +25,14 @@ async def main():
                 print("-", tool.name)
 
             result = await session.call_tool(
-                "check_calendar",
+                "book_appointment",
                 {
-                    "date": "2026-08-10",
-                    "time": "10:00"
-                }
+                    "date": "2026-08-20",
+                    "time": "10:00",
+                    "customer_name": "Test Customer",
+                    "phone_number": "08000000000",
+                    "purpose": "Test appointment",
+                },
             )
 
             print("\nTool result:")
