@@ -25,13 +25,10 @@ async def main():
                 print("-", tool.name)
 
             result = await session.call_tool(
-                "book_appointment",
+                "cancel_appointment",
                 {
-                    "date": "2026-08-20",
-                    "time": "10:00",
                     "customer_name": "Test Customer",
                     "phone_number": "08000000000",
-                    "purpose": "Test appointment",
                 },
             )
 

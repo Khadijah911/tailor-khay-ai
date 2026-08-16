@@ -3,7 +3,7 @@ import anyio
 
 from mcp_server.calendar_tools import (
     check_calendar,
-    book_appointment,
+    book_appointment,cancel_appointment,view_appointments
 )
 
 server = MCPServer("tailor-khay")
@@ -35,6 +35,31 @@ def book_appointment_tool(
         phone_number,
         purpose,
     )
+
+@server.tool(
+    name="cancel_appointment",
+    description="CANCEL a customer's appointment."
+)
+
+def cancel_appointment_tool(
+    phone_number: str,
+    customer_name: str) -> dict:
+    return cancel_appointment(
+        phone_number,
+        customer_name
+    )
+
+@server.tool(
+    name="view_appointments",
+    description="VIEW  customer's appointment."
+)
+
+def view_appointments_tool(
+    date:str) -> dict:
+    return view_appointments(
+        date 
+    )
+
 
 
 async def main():

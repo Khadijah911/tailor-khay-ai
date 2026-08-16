@@ -155,7 +155,6 @@ Use this tool ONLY when the customer wants to cancel an existing appointment.
 The tool searches for the customer's appointment and removes it from the calendar.
 """
 
-  print("cancel_appointment tool called")
 
   
   service = get_calendar_service()
