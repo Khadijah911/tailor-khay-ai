@@ -1,4 +1,5 @@
-from mcp.server import MCPServer
+#from mcp.server import 
+from mcp.server.fastmcp import FastMCP
 import anyio
 
 from mcp_server.calendar_tools import (
@@ -6,7 +7,8 @@ from mcp_server.calendar_tools import (
     book_appointment,cancel_appointment,view_appointments
 )
 
-server = MCPServer("tailor-khay")
+#server = MCPServer("tailor-khay")
+server = FastMCP("tailor-khay")
 
 
 @server.tool(
