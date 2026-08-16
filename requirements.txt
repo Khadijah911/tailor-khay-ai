@@ -89,9 +89,11 @@ jupyterlab_widgets==3.0.15
 langchain==0.3.26
 langchain-anthropic==0.3.15
 langchain-community==0.3.26
-langchain-core==0.3.66
+langchain-core==1.5.5
 langchain-experimental==0.3.4
+langchain-mcp-adapters==0.3.2
 langchain-openai==0.3.25
+langchain-protocol==0.0.18
 langchain-text-splitters==0.3.8
 langgraph==0.4.9
 langgraph-checkpoint==2.1.0
@@ -217,6 +219,7 @@ typing_extensions==4.16.0
 tzdata==2025.2
 uritemplate==4.2.0
 urllib3==2.5.0
+uuid_utils==0.17.0
 uvicorn==0.34.3
 wcwidth==0.2.13
 webencodings==0.5.1
